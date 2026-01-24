@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Crypto Pulse 📈
 
-## Getting Started
+Crypto Pulse is a production-quality, real-time cryptocurrency monitoring application. It features statistical anomaly detection, whale transaction tracking, and AI-driven insights to explain market volatility.
 
-First, run the development server:
+## 🚀 Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Real-Time Data**: Live price streaming via WebSockets and Redis.
+- **Statistical Anomaly Detection**: Uses rolling windows to detect abnormal volatility (based on standard deviation).
+- **Whale Watcher**: Monitors large transactions and correlates them with price movements.
+- **AI Insights**: Automatically generates explanations for price anomalies using LLMs (GPT-4).
+- **Interactive Dashboards**: Clean, professional UI with real-time charts and movement feeds.
+- **Alert System**: User-defined price and movement alerts with browser push notifications.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🛠 Tech Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Frontend**: Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui, Recharts.
+- **Backend**: Custom Node.js server (server.ts), Socket.io, Redis (caching & rolling stats).
+- **Persistence**: PostgreSQL with Prisma ORM.
+- **AI/External**: OpenAI GPT-4, CoinGecko API, Web Push API.
+- **Infrastructure**: Docker & GitHub Actions (CI).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🏗 Architecture
 
-## Learn More
+Crypto Pulse follows a service-oriented architecture:
 
-To learn more about Next.js, take a look at the following resources:
+- **PriceTracker**: Fetches data and updates the reactive cache.
+- **VolatilityDetector**: Runs statistical analysis on incoming streams.
+- **WhaleWatcher**: Monitors on-chain activity.
+- **AIAnalyzer**: Contextualizes events with natural language.
+- **NotificationService**: Manages real-time and background alerts.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 📦 Setup Instructions
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. **Clone the repository**
+2. **Install dependencies**: `npm install`
+3. **Configure Environment Variables**: Copy `.env.example` to `.env` and fill in your keys.
+4. **Database Setup**:
+   ```bash
+   npx prisma db push
+   npx prisma db seed # Once seed script is created
+   ```
+5. **Run Development Server**:
+   ```bash
+   npm run dev:server
+   ```
+6. **Docker Implementation**:
+   ```bash
+   docker-compose up --build
+   ```
 
-## Deploy on Vercel
+## 📜 License
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT

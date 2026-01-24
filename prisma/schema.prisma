@@ -1,0 +1,80 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String?
+  alerts        Alert[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Coin {
+  id               String            @id
+  symbol           String            @unique
+  name             String
+  lastPrice        Float?
+  status           String            @default("active")
+  priceHistory     PriceHistory[]
+  volatilityEvents VolatilityEvent[]
+  whaleTransactions WhaleTransaction[]
+  alerts           Alert[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+model Alert {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  coinId    String
+  coin      Coin     @relation(fields: [coinId], references: [id])
+  type      String   // price_above, price_below, pct_change
+  threshold Float
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VolatilityEvent {
+  id             String   @id @default(cuid())
+  coinId         String
+  coin           Coin     @relation(fields: [coinId], references: [id])
+  changePct      Float
+  severity       String   // low, medium, high
+  aiExplanation  String?  @db.Text
+  createdAt      DateTime @default(now())
+}
+
+model WhaleTransaction {
+  id         String   @id @default(cuid())
+  coinId     String
+  coin       Coin     @relation(fields: [coinId], references: [id])
+  amountUsd  Float
+  type       String   // inflow, outflow, unknown
+  hash       String   @unique
+  fromAddress String?
+  toAddress   String?
+  createdAt  DateTime @default(now())
+}
+
+model PriceHistory {
+  id        String   @id @default(cuid())
+  coinId    String
+  coin      Coin     @relation(fields: [coinId], references: [id])
+  price     Float
+  volume    Float?
+  timestamp DateTime @default(now())
+
+  @@index([coinId, timestamp])
+}
