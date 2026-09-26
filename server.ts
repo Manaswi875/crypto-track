@@ -50,7 +50,7 @@ app.prepare().then(() => {
     // Proxy Redis events to WebSockets
     if (redis) {
         const subClient = redis.duplicate()
-        subClient.subscribe('price-updates', 'whale-events', 'notifications')
+        subClient.subscribe('price-updates', 'whale-events', 'notifications', 'agent-progress')
 
         subClient.on('message', (channel, message) => {
             const data = JSON.parse(message)
@@ -59,6 +59,8 @@ app.prepare().then(() => {
                 io.to(`coin:${data.coinId}`).to('all-prices').emit('price-update', data)
             } else if (channel === 'whale-events') {
                 io.emit('whale-event', data)
+            } else if (channel === 'agent-progress') {
+                io.emit('brief-update', data)
             } else if (channel === 'notifications') {
                 if (data.userId === 'ALL') {
                     io.emit('notification', data)
