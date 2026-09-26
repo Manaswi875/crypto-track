@@ -11,27 +11,27 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  password      String
-  name          String?
-  alerts        Alert[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  alerts    Alert[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Coin {
-  id               String            @id
-  symbol           String            @unique
-  name             String
-  lastPrice        Float?
-  status           String            @default("active")
-  priceHistory     PriceHistory[]
-  volatilityEvents VolatilityEvent[]
+  id                String             @id
+  symbol            String             @unique
+  name              String
+  lastPrice         Float?
+  status            String             @default("active")
+  priceHistory      PriceHistory[]
+  volatilityEvents  VolatilityEvent[]
   whaleTransactions WhaleTransaction[]
-  alerts           Alert[]
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  alerts            Alert[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 }
 
 model Alert {
@@ -40,7 +40,7 @@ model Alert {
   user      User     @relation(fields: [userId], references: [id])
   coinId    String
   coin      Coin     @relation(fields: [coinId], references: [id])
-  type      String   // price_above, price_below, pct_change
+  type      String // price_above, price_below, pct_change
   threshold Float
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -48,25 +48,32 @@ model Alert {
 }
 
 model VolatilityEvent {
-  id             String   @id @default(cuid())
-  coinId         String
-  coin           Coin     @relation(fields: [coinId], references: [id])
-  changePct      Float
-  severity       String   // low, medium, high
-  aiExplanation  String?  @db.Text
-  createdAt      DateTime @default(now())
+  id            String   @id @default(cuid())
+  coinId        String
+  coin          Coin     @relation(fields: [coinId], references: [id])
+  changePct     Float
+  severity      String // low, medium, high
+  aiExplanation String?  @db.Text
+  source        String   @default("live") // live, replay
+  startPrice    Float?
+  endPrice      Float?
+  windowLabel   String? // e.g. "24h", "10m"
+  context       Json? // price context captured when the event was created
+  occurredAt    DateTime @default(now())
+  briefs        Brief[]
+  createdAt     DateTime @default(now())
 }
 
 model WhaleTransaction {
-  id         String   @id @default(cuid())
-  coinId     String
-  coin       Coin     @relation(fields: [coinId], references: [id])
-  amountUsd  Float
-  type       String   // inflow, outflow, unknown
-  hash       String   @unique
+  id          String   @id @default(cuid())
+  coinId      String
+  coin        Coin     @relation(fields: [coinId], references: [id])
+  amountUsd   Float
+  type        String // inflow, outflow, unknown
+  hash        String   @unique
   fromAddress String?
   toAddress   String?
-  createdAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
 }
 
 model PriceHistory {
@@ -78,4 +85,94 @@ model PriceHistory {
   timestamp DateTime @default(now())
 
   @@index([coinId, timestamp])
+}
+
+// --- Advisor book monitoring ---
+
+model Advisor {
+  id         String      @id @default(cuid())
+  name       String
+  email      String      @unique
+  households Household[]
+  createdAt  DateTime    @default(now())
+}
+
+model Household {
+  id             String    @id @default(cuid())
+  advisorId      String
+  advisor        Advisor   @relation(fields: [advisorId], references: [id])
+  name           String // "Patel Household"
+  primaryContact String // "Priya Patel"
+  riskProfile    String // conservative, moderate, aggressive
+  lifeStage      String
+  clientSince    DateTime
+  lastContactAt  DateTime
+  notes          String    @db.Text // recent meeting notes
+  holdings       Holding[]
+  briefs         Brief[]
+  createdAt      DateTime  @default(now())
+}
+
+model Holding {
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  symbol      String // IBIT, AAPL, BND ...
+  name        String
+  assetClass  String // equity, fixed_income, cash, crypto_etf, crypto
+  coinId      String? // underlying crypto exposure, e.g. bitcoin for IBIT
+  marketValue Float
+
+  @@index([householdId])
+  @@index([coinId])
+}
+
+model Brief {
+  id                 String          @id @default(cuid())
+  eventId            String
+  event              VolatilityEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  householdId        String
+  household          Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  status             String          @default("queued") // queued, generating, draft, approved, rejected, failed
+  // Deterministic impact numbers, computed in code (not by the model)
+  exposureUsd        Float
+  impactUsd          Float
+  impactPctOfAum     Float
+  // Agent output
+  priority           String? // call_today, send_message, monitor
+  advisorSummary     String?         @db.Text
+  clientMessage      String?         @db.Text
+  rationale          String?         @db.Text
+  citedFacts         Json?
+  complianceFlags    Json?
+  trace              Json?
+  // Advisor review
+  finalClientMessage String?         @db.Text
+  edited             Boolean         @default(false)
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  // Run metrics
+  model              String?
+  inputTokens        Int?
+  outputTokens       Int?
+  costUsd            Float?
+  latencyMs          Int?
+  error              String?         @db.Text
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@unique([eventId, householdId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String // event_created, briefs_requested, brief_generated, brief_failed, brief_approved, brief_rejected
+  actor      String // system, agent, advisor:<email>
+  entityType String
+  entityId   String
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityId])
+  @@index([createdAt])
 }

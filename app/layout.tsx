@@ -28,9 +28,9 @@ export default function RootLayout({
                   <h1 className="text-xl font-bold tracking-tight">Crypto<span className="text-primary">Pulse</span></h1>
                 </div>
                 <nav className="hidden md:flex items-center gap-6">
-                  <a href="#" className="text-sm font-medium hover:text-primary transition-colors">Dashboard</a>
-                  <a href="#" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Alerts</a>
-                  <a href="#" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Whales</a>
+                  <a href="/" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Markets</a>
+                  <a href="/advisor" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Book Monitor</a>
+                  <a href="/advisor/audit" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Audit Trail</a>
                 </nav>
                 <div className="flex items-center gap-4">
                   <div className="px-3 py-1 bg-secondary rounded-full text-xs font-medium flex items-center gap-2">
