@@ -5,7 +5,9 @@
         "moduleResolution": "node",
         "baseUrl": ".",
         "outDir": "dist",
-        "noEmit": false
+        "noEmit": false,
+        "incremental": false,
+        "sourceMap": true
     },
     "include": [
         "server.ts",
