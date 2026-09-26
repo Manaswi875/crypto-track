@@ -4,7 +4,8 @@ import { FALLBACK_BETA, MODEL, getAnthropic, hasAnthropicKey } from '@/lib/anthr
 
 export class AIAnalyzer {
     async explainMovement(eventId: string, coinId: string, price: number, changePct: number) {
-        if (!hasAnthropicKey()) return
+        // Off unless explicitly enabled: live events fire on their own and would spend API credits unattended
+        if (process.env.ENABLE_LIVE_AI_EXPLANATIONS !== 'true' || !hasAnthropicKey()) return
 
         try {
             const response = await getAnthropic().beta.messages.create({
