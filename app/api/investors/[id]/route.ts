@@ -40,6 +40,7 @@ const CryptoHolding = z.object({
 
 const Body = z.object({
     goal: z.string().trim().min(1).max(120),
+    cryptoReason: z.string().trim().max(120).default(''),
     timeHorizon: z.string().trim().min(1).max(60),
     dropComfortPct: z.number().min(1).max(100),
     crypto: z.array(CryptoHolding).min(1).max(20),
@@ -73,14 +74,14 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
     const parsed = Body.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid portfolio' }, { status: 400 })
-    const { goal, timeHorizon, dropComfortPct } = parsed.data
+    const { goal, cryptoReason, timeHorizon, dropComfortPct } = parsed.data
     const positions = toPositions(parsed.data)
 
     // Numbers changed, so earlier insights no longer describe this portfolio
     await prisma.$transaction([
         prisma.position.deleteMany({ where: { investorId: investor.id } }),
         prisma.insight.deleteMany({ where: { investorId: investor.id } }),
-        prisma.investor.update({ where: { id: investor.id }, data: { goal, timeHorizon, dropComfortPct, positions: { create: positions } } }),
+        prisma.investor.update({ where: { id: investor.id }, data: { goal, cryptoReason, timeHorizon, dropComfortPct, positions: { create: positions } } }),
     ])
     return NextResponse.json({ ok: true })
 }

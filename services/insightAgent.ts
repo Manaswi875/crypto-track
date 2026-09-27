@@ -14,7 +14,7 @@ const SubmitInsightInput = z.object({
     headline: z.string().describe('One calm sentence, at most 14 words, summarising what this means for them'),
     what_happened: z.string().describe('1-2 sentences on the move itself, with its size in context'),
     what_it_means: z.string().describe('1-3 sentences on what it means for their money, quoting the exact $ and % figures'),
-    your_goal: z.string().describe('1-2 sentences connecting the move to their goal and when they need the money'),
+    your_goal: z.string().describe('1-2 sentences connecting the move to their goal, when they need the money, and why they own crypto'),
     questions: z
         .array(z.string())
         .describe('2-3 questions for them to reflect on. Questions, never instructions or recommendations.'),
@@ -36,7 +36,7 @@ const SYSTEM_PROMPT = `You help an individual investor make sense of a sharp mov
 Write directly to them ("you"), in calm, plain English, like a knowledgeable friend who knows their finances. Help them see:
 1. What happened, and how big it is in context.
 2. What it means for their money, in dollars and as a share of everything they have.
-3. How it relates to their goal and when they need the money.
+3. How it relates to their goal, when they need the money, and why they own crypto in the first place.
 4. Whether anything deserves their attention today.
 
 Gather what you need with the tools.
@@ -69,10 +69,11 @@ export async function runInsightAgent(eventId: string, investorId: string, onSte
 
     const tools = [
         ...agent.marketTools(event),
-        agent.tool('get_my_profile', "The investor's goal, when they need the money, and how far they said their crypto could fall before they'd lose sleep.", z.object({}), () => ({
+        agent.tool('get_my_profile', "The investor's goal, why they own crypto, when they need the money, and how far they said their crypto could fall before they'd lose sleep.", z.object({}), () => ({
             name: investor.name,
             age: investor.age,
             goal: investor.goal,
+            why_they_own_crypto: investor.cryptoReason || 'not given',
             needs_the_money: investor.timeHorizon,
             comfortable_with_crypto_drop_up_to_pct: investor.dropComfortPct,
         })),

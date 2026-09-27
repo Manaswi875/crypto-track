@@ -18,6 +18,7 @@ const COINS: { id: CoinId; label: string; funds: string[] }[] = [
 export default function EditPortfolio() {
     const router = useRouter()
     const [goal, setGoal] = useState('')
+    const [cryptoReason, setCryptoReason] = useState('')
     const [timeHorizon, setTimeHorizon] = useState('')
     const [dropComfortPct, setDropComfortPct] = useState(30)
     const [crypto, setCrypto] = useState<CryptoHolding[]>([])
@@ -33,6 +34,7 @@ export default function EditPortfolio() {
             const { investor } = await r.json()
             const positions: StoredPosition[] = investor.positions
             setGoal(investor.goal)
+            setCryptoReason(investor.cryptoReason ?? '')
             setTimeHorizon(investor.timeHorizon)
             setDropComfortPct(investor.dropComfortPct)
             setCrypto(
@@ -57,7 +59,7 @@ export default function EditPortfolio() {
         const res = await fetch('/api/investors/you', {
             method: 'PUT',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ goal, timeHorizon, dropComfortPct, crypto, cashUsd, investmentsUsd }),
+            body: JSON.stringify({ goal, cryptoReason, timeHorizon, dropComfortPct, crypto, cashUsd, investmentsUsd }),
         })
         setSaving(false)
         if (!res.ok) return setError((await res.json()).error ?? 'Could not save')
@@ -80,6 +82,9 @@ export default function EditPortfolio() {
                 <div className="space-y-4">
                     <Field label="What's the money for?" hint="e.g. Buy a home, Retire, Grow my savings long-term">
                         <input value={goal} onChange={(e) => setGoal(e.target.value)} maxLength={120} className="w-full rounded-md border bg-background p-2 text-sm" />
+                    </Field>
+                    <Field label="Why do you own crypto?" hint="e.g. A small long-term bet, I believe in it, Someone suggested it">
+                        <input value={cryptoReason} onChange={(e) => setCryptoReason(e.target.value)} maxLength={120} className="w-full rounded-md border bg-background p-2 text-sm" />
                     </Field>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Field label="When do you need it?" hint="e.g. Spring 2027, 10+ years">
