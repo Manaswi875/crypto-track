@@ -4,7 +4,7 @@ import * as z from 'zod/v4'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { checkClientMessage } from '@/lib/compliance'
-import { portfolioImpact } from '@/lib/impact'
+import { eventMoves, portfolioImpact } from '@/lib/impact'
 import { AgentRun, TraceStep } from '@/services/agentCore'
 
 const SubmitInsightInput = z.object({
@@ -31,7 +31,7 @@ const SubmitInsightInput = z.object({
 })
 export type SubmittedInsight = z.infer<typeof SubmitInsightInput>
 
-const SYSTEM_PROMPT = `You help an individual investor make sense of a sharp move in a crypto asset they hold, at the moment they are most likely to panic.
+const SYSTEM_PROMPT = `You help an individual investor make sense of a sharp crypto sell-off that hit coins they hold, at the moment they are most likely to panic.
 
 Write directly to them ("you"), in calm, plain English, like a knowledgeable friend who knows their finances. Help them see:
 1. What happened, and how big it is in context.
@@ -44,13 +44,13 @@ Gather what you need with the tools.
 Rules:
 - You are not a financial adviser. Never tell them to buy, sell, hold, rebalance, or "buy the dip". Never predict prices or promise outcomes. You give context; they decide. An automated compliance check runs on your output.
 - Every number you state must come from a tool result. Quote dollar and percentage figures exactly as returned by get_my_impact. Never calculate your own figures.
-- You only have data on this one asset's move. Do not claim how their other holdings or the wider market performed.
+- A sell-off can move several coins by different amounts; get_my_impact breaks the loss down by holding. You only have data on these crypto moves. Do not claim how their cash, stocks, or bonds performed.
 - Use plain words for their holdings ("your Bitcoin fund", "your cash and savings"), not ticker symbols alone.
 - If the move exceeds their crypto loss tolerance, or they need the money soon, say so plainly and kindly. Suggest questions to reflect on, including whether to talk to a licensed financial adviser, but do not tell them what to do.
 - Urgency:
-  - check_in_today: the move exceeds their crypto loss tolerance, or the loss is 5% or more of their total portfolio, or they need the money within about a year.
-  - within_your_plan: the move is within their loss tolerance, the loss is small relative to their total, and they do not need the money for several years.
-  - good_to_know: anything in between.
+  - check_in_today: the drop in a coin they hold exceeds their crypto loss tolerance, or they need the money within about a year and this loss meaningfully affects it.
+  - within_your_plan: the drops are within their loss tolerance, the loss is under 5% of everything they have, and they do not need the money for several years.
+  - good_to_know: anything in between, e.g. within their tolerance but a large share of everything they have.
 - Keep it short. The whole insight should be readable in under a minute.
 
 When you are done, call submit_insight exactly once.`
@@ -61,8 +61,11 @@ export async function runInsightAgent(eventId: string, investorId: string, onSte
         prisma.volatilityEvent.findUniqueOrThrow({ where: { id: eventId }, include: { coin: true } }),
         prisma.investor.findUniqueOrThrow({ where: { id: investorId }, include: { positions: true } }),
     ])
-    const impact = portfolioImpact(investor.positions, event.coinId, event.changePct)
-    if (impact.exposureUsd === 0) throw new Error(`${investor.name} holds no ${event.coin.name}`)
+    const moves = eventMoves(event)
+    const impact = portfolioImpact(investor.positions, moves)
+    if (impact.exposureUsd === 0) throw new Error(`${investor.name} holds none of the coins that moved`)
+    // Loss tolerance is about the coins they actually hold
+    const worstHeldMove = Math.min(...impact.exposedPositions.map((p) => p.movePct))
 
     const agent = new AgentRun(onStep)
     let submitted: SubmittedInsight | null = null
@@ -86,17 +89,18 @@ export async function runInsightAgent(eventId: string, investorId: string, onSte
                     type: p.assetClass === 'crypto_etf' ? 'crypto fund' : p.assetClass === 'crypto' ? 'crypto held directly' : p.name.toLowerCase(),
                     value_usd: p.marketValue,
                     share_of_total_pct: Number(((p.marketValue / impact.totalUsd) * 100).toFixed(2)),
-                    affected_by_this_move: p.coinId === event.coinId,
+                    affected_by_this_move: p.coinId != null && moves[p.coinId] != null,
                 })),
         })),
-        agent.tool('get_my_impact', 'The pre-computed dollar impact of this move on the investor, and how the move compares with their crypto loss tolerance. Quote these numbers exactly.', z.object({}), () => ({
-            exposure_usd: impact.exposureUsd,
-            exposure_pct_of_portfolio: impact.exposurePctOfTotal,
+        agent.tool('get_my_impact', 'The pre-computed dollar impact of this sell-off on the investor, in total and per holding, and how the drops compare with their crypto loss tolerance. Quote these numbers exactly.', z.object({}), () => ({
+            crypto_exposure_usd: impact.exposureUsd,
+            crypto_exposure_pct_of_total: impact.exposurePctOfTotal,
             estimated_impact_usd: impact.impactUsd,
-            impact_pct_of_portfolio: impact.impactPctOfTotal,
-            move_pct: Number(event.changePct.toFixed(2)),
+            impact_pct_of_total: impact.impactPctOfTotal,
+            by_holding: impact.exposedPositions.map((p) => ({ holding: p.name, value_usd: p.marketValue, move_pct: p.movePct, impact_usd: p.impactUsd })),
             crypto_loss_tolerance_pct: investor.dropComfortPct,
-            move_exceeds_loss_tolerance: Math.abs(event.changePct) > investor.dropComfortPct,
+            largest_drop_among_their_holdings_pct: worstHeldMove,
+            exceeds_loss_tolerance: Math.abs(worstHeldMove) > investor.dropComfortPct,
         })),
         betaZodTool({
             name: 'submit_insight',
@@ -113,7 +117,7 @@ export async function runInsightAgent(eventId: string, investorId: string, onSte
     const result = await agent.run({
         system: SYSTEM_PROMPT,
         tools,
-        userMessage: `${event.coin.name} just moved ${event.changePct.toFixed(2)}%. Explain what it means for me.`,
+        userMessage: `Crypto just sold off (${Object.entries(moves).map(([c, m]) => `${c} ${m.toFixed(1)}%`).join(', ')}). Explain what it means for me.`,
     })
 
     const insight = submitted as SubmittedInsight | null
@@ -142,7 +146,7 @@ export async function requestInsight(eventId: string, investorId: string, opts: 
         prisma.volatilityEvent.findUniqueOrThrow({ where: { id: eventId } }),
         prisma.investor.findUniqueOrThrow({ where: { id: investorId }, include: { positions: true } }),
     ])
-    const impact = portfolioImpact(investor.positions, event.coinId, event.changePct)
+    const impact = portfolioImpact(investor.positions, eventMoves(event))
     const numbers = { exposureUsd: impact.exposureUsd, impactUsd: impact.impactUsd, impactPctOfTotal: impact.impactPctOfTotal }
 
     const row = await prisma.insight.upsert({

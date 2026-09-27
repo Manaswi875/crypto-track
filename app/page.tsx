@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { useSocket } from '@/context/SocketContext'
 import { Panel, SourceBadge, UrgencyBadge } from '@/components/advisor/Badges'
+import { Moves, eventTitle } from '@/components/Moves'
 import { COIN_SYMBOL, date, dateTime, pct, usd } from '@/lib/format'
 
 type InvestorSummary = { id: string; name: string; tagline: string; isDemo: boolean; totalUsd: number; cryptoUsd: number }
@@ -14,6 +15,7 @@ type EventRow = {
     coinId: string
     coin: { name: string }
     changePct: number
+    moves?: unknown
     source: string
     occurredAt: string
     impact: { exposureUsd: number; impactUsd: number; impactPctOfTotal: number }
@@ -36,7 +38,7 @@ type InvestorData = {
     events: EventRow[]
 }
 
-const REPLAY_COINS = ['bitcoin', 'ethereum', 'solana'] as const
+type CrashOption = { date: string; leadCoinId: string; moves: Record<string, number>; kind: string; eventId: string | null }
 const LIVE_COINS = ['bitcoin', 'ethereum', 'solana']
 
 export default function MyPortfolio() {
@@ -49,6 +51,16 @@ export default function MyPortfolio() {
     const [busy, setBusy] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [notice, setNotice] = useState<{ eventId: string; text: string } | null>(null)
+    const [crashes, setCrashes] = useState<CrashOption[] | null>(null)
+
+    const loadCrashes = useCallback(async () => {
+        const r = await fetch('/api/events/replay/options')
+        setCrashes(r.ok ? await r.json() : [])
+    }, [])
+
+    useEffect(() => {
+        loadCrashes()
+    }, [loadCrashes])
 
     useEffect(() => {
         fetch('/api/investors').then(async (r) => r.ok && setInvestors(await r.json()))
@@ -79,13 +91,13 @@ export default function MyPortfolio() {
         }
     }, [socket])
 
-    async function replay(coinId: string) {
-        setBusy(`replay:${coinId}`)
+    async function replay(date: string) {
+        setBusy(`replay:${date}`)
         setError(null)
         const res = await fetch('/api/events/replay', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ coinId }),
+            body: JSON.stringify({ date }),
         })
         setBusy(null)
         if (!res.ok) return setError('Could not load price history right now. Try again in a minute.')
@@ -93,7 +105,7 @@ export default function MyPortfolio() {
         const text = created ? 'Added to your list.' : 'Already in your list.'
         setNotice({ eventId: event.id, text })
         setTimeout(() => setNotice((n) => (n?.eventId === event.id ? null : n)), 4000)
-        await load()
+        await Promise.all([load(), loadCrashes()])
         document.getElementById(`event-${event.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
 
@@ -202,24 +214,50 @@ export default function MyPortfolio() {
                     <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
                         <div className="space-y-6 lg:col-span-2">
                             <Panel title="Crypto moves" action={<span className="text-xs text-muted-foreground">What each move means for {inv.isDemo ? inv.name : 'you'}</span>}>
-                                <div className="mb-5 rounded-lg border border-dashed p-4">
-                                    <div className="text-sm font-medium">Replay a real crash</div>
+                                <details className="group mb-5 rounded-lg border border-dashed p-4" open={data.events.length === 0}>
+                                    <summary className="cursor-pointer list-none text-sm font-medium">
+                                        Replay a real crash <span className="text-muted-foreground group-open:hidden">▸</span>
+                                        <span className="hidden text-muted-foreground group-open:inline">▾</span>
+                                    </summary>
                                     <p className="mt-1 text-xs text-muted-foreground">
-                                        Finds the worst single day of the past year in real CoinGecko prices and applies it to this portfolio.
+                                        Real sell-offs from the past year of CoinGecko prices. Each applies every coin&apos;s actual move that day to this portfolio.
                                     </p>
-                                    <div className="mt-3 flex flex-wrap gap-2">
-                                        {REPLAY_COINS.map((coin) => (
-                                            <button
-                                                key={coin}
-                                                onClick={() => replay(coin)}
-                                                disabled={busy !== null}
-                                                className="rounded-md border bg-secondary px-3 py-1.5 text-sm font-medium hover:bg-secondary/70 disabled:opacity-50"
-                                            >
-                                                {busy === `replay:${coin}` ? 'Fetching history…' : `Worst ${COIN_SYMBOL[coin]} day`}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
+                                    {!crashes ? (
+                                        <p className="mt-3 text-xs text-muted-foreground">Loading past crashes…</p>
+                                    ) : crashes.length === 0 ? (
+                                        <p className="mt-3 text-xs text-muted-foreground">Price history is unavailable right now. Try again in a minute.</p>
+                                    ) : (
+                                        <ul className="mt-3 divide-y">
+                                            {crashes.map((c) => (
+                                                <li key={c.date} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                                                    <div className="text-sm">
+                                                        <span className="font-medium">{date(c.date)}</span>{' '}
+                                                        <span className="text-muted-foreground">· {eventTitle({ coinId: c.leadCoinId, changePct: c.moves[c.leadCoinId], moves: c.moves })}</span>
+                                                        <div className="text-xs">
+                                                            <Moves event={{ coinId: c.leadCoinId, changePct: c.moves[c.leadCoinId], moves: c.moves }} />
+                                                        </div>
+                                                    </div>
+                                                    {c.eventId ? (
+                                                        <button
+                                                            onClick={() => document.getElementById(`event-${c.eventId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                                                            className="text-xs text-emerald-400 hover:underline"
+                                                        >
+                                                            ✓ In your list
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => replay(c.date)}
+                                                            disabled={busy !== null}
+                                                            className="rounded-md border bg-secondary px-3 py-1 text-xs font-medium hover:bg-secondary/70 disabled:opacity-50"
+                                                        >
+                                                            {busy === `replay:${c.date}` ? 'Adding…' : 'Replay'}
+                                                        </button>
+                                                    )}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </details>
 
                                 {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
                                 {notice && <p className="mb-3 text-sm text-emerald-400">{notice.text}</p>}
@@ -238,19 +276,19 @@ export default function MyPortfolio() {
                                                 >
                                                     <div className="min-w-0">
                                                         <div className="flex flex-wrap items-center gap-2">
-                                                            <span className="font-medium">{e.coin.name}</span>
-                                                            <span className={`font-semibold tabular-nums ${e.changePct < 0 ? 'text-red-400' : 'text-emerald-400'}`}>{pct(e.changePct)}</span>
+                                                            <span className="font-medium">{eventTitle(e)}</span>
                                                             <SourceBadge source={e.source} />
                                                             <span className="text-xs text-muted-foreground">{e.source === 'replay' ? date(e.occurredAt) : dateTime(e.occurredAt)}</span>
                                                         </div>
+                                                        <Moves event={e} className="mt-1 text-sm" />
                                                         <div className="mt-1 text-sm">
                                                             {affected ? (
                                                                 <>
-                                                                    Your impact: <span className="font-medium tabular-nums text-red-400">{usd(e.impact.impactUsd)}</span>{' '}
-                                                                    <span className="text-muted-foreground">({pct(e.impact.impactPctOfTotal)} of your portfolio)</span>
+                                                                    {inv.isDemo ? `${inv.name}'s` : 'Your'} impact: <span className="font-medium tabular-nums text-red-400">{usd(e.impact.impactUsd)}</span>{' '}
+                                                                    <span className="text-muted-foreground">({pct(e.impact.impactPctOfTotal)} of everything)</span>
                                                                 </>
                                                             ) : (
-                                                                <span className="text-muted-foreground">You don&apos;t hold {e.coin.name}, so this doesn&apos;t change your portfolio.</span>
+                                                                <span className="text-muted-foreground">None of the coins that moved are in this portfolio.</span>
                                                             )}
                                                         </div>
                                                         {e.insight?.status === 'ready' && (

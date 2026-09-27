@@ -6,7 +6,7 @@ import prisma from '@/lib/prisma'
 import redis from '@/lib/redis'
 import { audit } from '@/lib/audit'
 import { checkClientMessage } from '@/lib/compliance'
-import { computeEventImpact, HouseholdImpact } from '@/lib/impact'
+import { computeEventImpact, eventMoves, HouseholdImpact } from '@/lib/impact'
 import { AgentRun } from '@/services/agentCore'
 
 const ADVISOR_FIRST_NAME = 'Alex'
@@ -46,7 +46,7 @@ Gather what you need with the tools. Everything about the event, the household, 
 
 Rules:
 - Every number you state must come from a tool result. Quote dollar and percentage impacts exactly as returned by get_event_impact. Never calculate your own figures.
-- You only have data on this one asset's move. Do not claim how the client's other holdings or the wider market performed (e.g. "the rest of your portfolio was unaffected"); you do not know that.
+- You only have data on these crypto moves. Do not claim how the client's other holdings or the wider market performed (e.g. "the rest of your portfolio was unaffected"); you do not know that.
 - Never recommend buying, selling, rebalancing, or "buying the dip". Never predict prices or promise outcomes. The advisor makes decisions; you inform them. An automated compliance check runs on your output.
 - Client message: plain English, calm and warm, first person in the advisor's voice, signed "${ADVISOR_FIRST_NAME}", at most 120 words. Make it specific to this household. Offer a conversation. Do not quote or reveal the internal meeting notes, and never mention other clients.
 - Priority:
@@ -78,8 +78,9 @@ export async function runBriefAgent(eventId: string, householdId: string, impact
     ])
     const bookImpacts = impacts ?? (await computeEventImpact(eventId))
     const impactIdx = bookImpacts.findIndex((i) => i.householdId === householdId)
-    if (impactIdx === -1) throw new Error(`Household ${householdId} has no exposure to ${event.coinId}`)
+    if (impactIdx === -1) throw new Error(`Household ${householdId} holds none of the coins that moved`)
     const impact = bookImpacts[impactIdx]
+    const moves = eventMoves(event)
 
     const agent = new AgentRun()
     let submitted: SubmittedBrief | null = null
@@ -106,7 +107,7 @@ export async function runBriefAgent(eventId: string, householdId: string, impact
                     asset_class: h.assetClass,
                     market_value_usd: h.marketValue,
                     weight_pct: Number(((h.marketValue / impact.aumUsd) * 100).toFixed(2)),
-                    exposed_to_event: h.coinId === event.coinId,
+                    exposed_to_event: h.coinId != null && moves[h.coinId] != null,
                 })),
         })),
         agent.tool('get_event_impact', 'The pre-computed dollar impact of this event on the household. Quote these numbers exactly.', z.object({}), () => ({

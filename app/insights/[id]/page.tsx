@@ -1,10 +1,11 @@
 'use client'
 
 import Link from 'next/link'
+import { Moves, eventTitle } from '@/components/Moves'
 import { useCallback, useEffect, useState } from 'react'
 import { Panel, UrgencyBadge } from '@/components/advisor/Badges'
 import { TOOL_LABEL, Trace, TraceStep } from '@/components/Trace'
-import { date, dateTime, pct, price, usd } from '@/lib/format'
+import { date, dateTime, pct, usd } from '@/lib/format'
 
 type InsightData = {
     insight: {
@@ -30,7 +31,7 @@ type InsightData = {
         latencyMs: number | null
         error: string | null
         createdAt: string
-        event: { coin: { name: string }; changePct: number; source: string; occurredAt: string; startPrice: number | null; endPrice: number | null }
+        event: { coinId: string; coin: { name: string }; changePct: number; moves?: unknown; source: string; occurredAt: string; startPrice: number | null; endPrice: number | null }
         investor: { id: string; name: string; isDemo: boolean; goal: string; dropComfortPct: number; positions: { marketValue: number }[] }
     }
     siblings: { id: string; investorId: string; urgency: string | null; investor: { name: string } }[]
@@ -83,9 +84,7 @@ export default function InsightPage({ params }: { params: { id: string } }) {
                     ← {i.investor.isDemo ? `${i.investor.name}'s portfolio` : 'Your portfolio'}
                 </Link>
                 <p className="mt-3 text-sm text-muted-foreground">
-                    {i.event.coin.name} <span className={i.event.changePct < 0 ? 'text-red-400' : 'text-emerald-400'}>{pct(i.event.changePct)}</span>
-                    {i.event.startPrice && i.event.endPrice ? ` · ${price(i.event.startPrice)} → ${price(i.event.endPrice)}` : ''}
-                    {' · '}
+                    <span className="font-medium text-foreground">{eventTitle(i.event)}</span> · <Moves event={i.event} /> ·{' '}
                     {i.event.source === 'replay' ? `${date(i.event.occurredAt)} (historical replay)` : dateTime(i.event.occurredAt)}
                 </p>
             </div>

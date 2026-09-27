@@ -1,9 +1,10 @@
 'use client'
 
 import Link from 'next/link'
+import { Moves, eventTitle } from '@/components/Moves'
 import { useCallback, useEffect, useState } from 'react'
 import { SourceBadge, UrgencyBadge } from '@/components/advisor/Badges'
-import { date, dateTime, pct, price, usd } from '@/lib/format'
+import { date, dateTime, pct, usd } from '@/lib/format'
 
 type Row = {
     id: string
@@ -11,11 +12,11 @@ type Row = {
     tagline: string
     isDemo: boolean
     dropComfortPct: number
-    impact: { totalUsd: number; exposureUsd: number; exposurePctOfTotal: number; impactUsd: number; impactPctOfTotal: number }
+    impact: { totalUsd: number; exposureUsd: number; exposurePctOfTotal: number; impactUsd: number; impactPctOfTotal: number; exposedPositions: { movePct: number }[] }
     insight: { id: string; status: string; urgency: string | null; headline: string | null } | null
 }
 type CompareData = {
-    event: { id: string; coin: { name: string }; changePct: number; source: string; occurredAt: string; startPrice: number | null; endPrice: number | null }
+    event: { id: string; coinId: string; coin: { name: string }; changePct: number; moves?: unknown; source: string; occurredAt: string; startPrice: number | null; endPrice: number | null }
     investors: Row[]
 }
 
@@ -62,12 +63,12 @@ export default function Compare({ params }: { params: { id: string } }) {
                 <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">← My Portfolio</Link>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                     <h2 className="text-3xl font-bold tracking-tight">
-                        {event.coin.name} <span className={event.changePct < 0 ? 'text-red-400' : 'text-emerald-400'}>{pct(event.changePct)}</span>
+                        {eventTitle(event)}
                     </h2>
                     <SourceBadge source={event.source} />
                 </div>
+                <Moves event={event} className="mt-2 text-lg" />
                 <p className="mt-1 text-muted-foreground">
-                    {event.startPrice && event.endPrice ? `${price(event.startPrice)} → ${price(event.endPrice)} · ` : ''}
                     {event.source === 'replay' ? date(event.occurredAt) : dateTime(event.occurredAt)} · Same move, different people, different meaning.
                 </p>
             </div>
@@ -77,7 +78,8 @@ export default function Compare({ params }: { params: { id: string } }) {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {investors.map((i) => {
                     const affected = i.impact.exposureUsd > 0
-                    const beyondComfort = Math.abs(event.changePct) > i.dropComfortPct
+                    const worstHeldMove = Math.min(0, ...i.impact.exposedPositions.map((p) => p.movePct))
+                const beyondComfort = Math.abs(worstHeldMove) > i.dropComfortPct
                     return (
                         <div key={i.id} className="flex flex-col rounded-xl border bg-card/50 p-5">
                             <div className="font-semibold">{i.name}</div>
@@ -113,7 +115,7 @@ export default function Compare({ params }: { params: { id: string } }) {
                                     </div>
                                 </>
                             ) : (
-                                <p className="mt-4 text-sm text-muted-foreground">Doesn&apos;t hold {event.coin.name}. Nothing changes, so no AI call is needed.</p>
+                                <p className="mt-4 text-sm text-muted-foreground">Holds none of the coins that moved. Nothing changes, so no AI call is needed.</p>
                             )}
                         </div>
                     )

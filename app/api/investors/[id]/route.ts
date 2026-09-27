@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import prisma from '@/lib/prisma'
 import { listEvents } from '@/lib/events'
-import { portfolioImpact } from '@/lib/impact'
+import { eventMoves, portfolioImpact } from '@/lib/impact'
 import { hasAnthropicKey } from '@/lib/anthropic'
 
 export const dynamic = 'force-dynamic'
@@ -25,7 +25,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         aiEnabled: hasAnthropicKey(),
         events: events.map((e) => ({
             ...e,
-            impact: portfolioImpact(investor.positions, e.coinId, e.changePct),
+            impact: portfolioImpact(investor.positions, eventMoves(e)),
             insight: insightByEvent.get(e.id) ?? null,
         })),
     })

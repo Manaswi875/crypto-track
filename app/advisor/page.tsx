@@ -1,9 +1,10 @@
 'use client'
 
 import Link from 'next/link'
+import { Moves, eventTitle } from '@/components/Moves'
 import { useCallback, useEffect, useState } from 'react'
 import { Panel, SourceBadge, Stat } from '@/components/advisor/Badges'
-import { COIN_SYMBOL, date, dateTime, pct, usd } from '@/lib/format'
+import { COIN_SYMBOL, date, dateTime, usd } from '@/lib/format'
 
 type Overview = {
     advisor: { name: string; email: string }
@@ -14,6 +15,7 @@ type Overview = {
         coinId: string
         coin: { name: string }
         changePct: number
+        moves?: unknown
         source: string
         occurredAt: string
         createdAt: string
@@ -135,11 +137,9 @@ export default function BookMonitor() {
                                 <li key={e.id}>
                                     <Link href={`/advisor/events/${e.id}`} className="flex items-center justify-between gap-4 py-3 hover:bg-secondary/30 -mx-2 px-2 rounded-md">
                                         <div className="flex items-center gap-3">
-                                            <span className={`w-20 text-right font-semibold tabular-nums ${e.changePct < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                                                {pct(e.changePct)}
-                                            </span>
                                             <div>
-                                                <div className="font-medium">{e.coin.name}</div>
+                                                <div className="font-medium">{eventTitle(e)}</div>
+                                                <Moves event={e} className="text-sm" />
                                                 <div className="text-xs text-muted-foreground">
                                                     {e.source === 'replay' ? date(e.occurredAt) : dateTime(e.occurredAt)}
                                                 </div>

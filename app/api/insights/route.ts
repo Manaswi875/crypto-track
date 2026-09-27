@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import prisma from '@/lib/prisma'
 import { hasAnthropicKey } from '@/lib/anthropic'
-import { portfolioImpact } from '@/lib/impact'
+import { eventMoves, portfolioImpact } from '@/lib/impact'
 import { requestInsight } from '@/services/insightAgent'
 
 const Body = z.object({ eventId: z.string().min(1), investorId: z.string().min(1), regenerate: z.boolean().optional() })
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
         prisma.investor.findUnique({ where: { id: investorId }, include: { positions: true } }),
     ])
     if (!event || !investor) return NextResponse.json({ error: 'Event or investor not found' }, { status: 404 })
-    if (portfolioImpact(investor.positions, event.coinId, event.changePct).exposureUsd === 0) {
+    if (portfolioImpact(investor.positions, eventMoves(event)).exposureUsd === 0) {
         return NextResponse.json({ error: 'This portfolio has no exposure to this move' }, { status: 400 })
     }
 
