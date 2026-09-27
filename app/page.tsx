@@ -27,6 +27,7 @@ type InvestorData = {
         age: number | null
         timeHorizon: string
         goal: string
+        cryptoReason: string
         dropComfortPct: number
         isDemo: boolean
         positions: Position[]
@@ -288,6 +289,7 @@ export default function MyPortfolio() {
                             >
                                 <p className="text-lg font-semibold leading-snug">{inv.goal}</p>
                                 <dl className="mt-3 space-y-2 text-sm">
+                                    {inv.cryptoReason && <Row label="Why crypto" value={inv.cryptoReason} />}
                                     <Row label="Needs the money" value={inv.timeHorizon} />
                                     <Row label="OK if crypto drops up to" value={`${inv.dropComfortPct}%`} />
                                 </dl>

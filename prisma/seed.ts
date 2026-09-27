@@ -210,6 +210,7 @@ const INVESTORS: {
     tagline: string
     age: number | null
     goal: string
+    cryptoReason: string
     timeHorizon: string
     dropComfortPct: number
     isDemo: boolean
@@ -221,6 +222,7 @@ const INVESTORS: {
         tagline: 'Your own portfolio',
         age: null,
         goal: 'Grow my savings long-term',
+        cryptoReason: 'A small long-term bet on Bitcoin',
         timeHorizon: '5+ years',
         dropComfortPct: 30,
         isDemo: false,
@@ -232,6 +234,7 @@ const INVESTORS: {
         tagline: 'Long-term crypto believer',
         age: 29,
         goal: 'Grow my wealth over the next decade',
+        cryptoReason: 'I believe crypto will grow a lot over the next decade',
         timeHorizon: '10+ years',
         dropComfortPct: 50,
         isDemo: true,
@@ -243,6 +246,7 @@ const INVESTORS: {
         tagline: 'Saving for a house',
         age: 36,
         goal: 'Buy our first home',
+        cryptoReason: 'A small bet on Bitcoin growing over time',
         timeHorizon: 'Spring 2027',
         dropComfortPct: 20,
         isDemo: true,
@@ -254,6 +258,7 @@ const INVESTORS: {
         tagline: 'Retiring next year',
         age: 63,
         goal: 'Retire and live off my savings',
+        cryptoReason: 'My son suggested adding a little Bitcoin',
         timeHorizon: 'Summer 2027',
         dropComfortPct: 10,
         isDemo: true,

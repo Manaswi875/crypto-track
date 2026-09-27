@@ -96,6 +96,7 @@ model Investor {
   tagline        String     // e.g. "Saving for a house"
   age            Int?
   goal           String     // short, e.g. "Buy our first home"
+  cryptoReason   String     @default("") // why they own crypto, e.g. "A small long-term bet"
   timeHorizon    String     // when they need the money, e.g. "Spring 2027"
   dropComfortPct Float      // how far crypto could fall before they'd lose sleep
   isDemo         Boolean    @default(true)
