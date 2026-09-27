@@ -5,6 +5,7 @@ import { Moves, eventTitle } from '@/components/Moves'
 import { useCallback, useEffect, useState } from 'react'
 import { Panel, UrgencyBadge } from '@/components/advisor/Badges'
 import { TOOL_LABEL, Trace, TraceStep } from '@/components/Trace'
+import { FollowUp, ThreadMessage } from '@/components/FollowUp'
 import { date, dateTime, pct, usd } from '@/lib/format'
 
 type InsightData = {
@@ -33,6 +34,7 @@ type InsightData = {
         createdAt: string
         event: { coinId: string; coin: { name: string }; changePct: number; moves?: unknown; source: string; occurredAt: string; startPrice: number | null; endPrice: number | null }
         investor: { id: string; name: string; isDemo: boolean; goal: string; dropComfortPct: number; positions: { marketValue: number }[] }
+        messages: ThreadMessage[]
     }
     siblings: { id: string; investorId: string; urgency: string | null; investor: { name: string } }[]
 }
@@ -112,7 +114,7 @@ export default function InsightPage({ params }: { params: { id: string } }) {
                     </div>
 
                     <Panel>
-                        <div className="space-y-5 text-[15px] leading-relaxed">
+                        <div id="insight-body" className="space-y-5 text-[15px] leading-relaxed">
                             <Section title="What happened">{i.whatHappened}</Section>
                             <Section title={`What it means for ${who === 'You' ? 'you' : who}`}>{i.whatItMeans}</Section>
                             <Section title={`${who === 'You' ? 'Your' : `${who}'s`} goal: ${i.investor.goal}`}>{i.yourGoal}</Section>
@@ -135,6 +137,8 @@ export default function InsightPage({ params }: { params: { id: string } }) {
                             )}
                         </div>
                     </Panel>
+
+                    <FollowUp insightId={i.id} selectableId="insight-body" initial={i.messages} />
 
                     {siblings.length > 1 && (
                         <div className="flex flex-wrap items-center gap-2 text-sm">

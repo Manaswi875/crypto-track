@@ -11,13 +11,14 @@ const SubmitInsightInput = z.object({
     urgency: z
         .enum(['check_in_today', 'good_to_know', 'within_your_plan'])
         .describe('How much attention this deserves from the investor today'),
-    headline: z.string().describe('One calm sentence, at most 14 words, summarising what this means for them'),
-    what_happened: z.string().describe('1-2 sentences on the move itself, with its size in context'),
-    what_it_means: z.string().describe('1-3 sentences on what it means for their money, quoting the exact $ and % figures'),
-    your_goal: z.string().describe('1-2 sentences connecting the move to their goal, when they need the money, and why they own crypto'),
+    headline: z.string().describe('One calm line, at most 12 words, on what this means for them'),
+    what_happened: z.string().describe('ONE sentence, at most 25 words: the move and its size in context'),
+    what_it_means: z.string().describe('At most 2 short sentences (40 words): what it means for their money. Their $ and % impact are already shown on screen, so mention the dollar figure at most once.'),
+    your_goal: z.string().describe('ONE sentence, at most 30 words, connecting the move to their goal, timing, and loss tolerance'),
     questions: z
         .array(z.string())
-        .describe('2-3 questions for them to reflect on. Questions, never instructions or recommendations.'),
+        .max(2)
+        .describe('1-2 short questions (at most 20 words each) to reflect on. Questions, never instructions or recommendations.'),
     cited_facts: z
         .array(
             z.object({
@@ -51,7 +52,7 @@ Rules:
   - check_in_today: the drop in a coin they hold exceeds their crypto loss tolerance, or they need the money within about a year and this loss meaningfully affects it.
   - within_your_plan: the drops are within their loss tolerance, the loss is under 5% of everything they have, and they do not need the money for several years.
   - good_to_know: anything in between, e.g. within their tolerance but a large share of everything they have.
-- Keep it short. The whole insight should be readable in under a minute.
+- Be brief: about 80 words in total. Say each thing once. Don't list things you don't know, and don't restate figures the screen already shows.
 
 When you are done, call submit_insight exactly once.`
 

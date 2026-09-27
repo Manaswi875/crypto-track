@@ -121,12 +121,12 @@ model Position {
 }
 
 model Insight {
-  id               String          @id @default(cuid())
+  id               String           @id @default(cuid())
   eventId          String
-  event            VolatilityEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event            VolatilityEvent  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   investorId       String
-  investor         Investor        @relation(fields: [investorId], references: [id], onDelete: Cascade)
-  status           String          @default("generating") // generating, ready, failed
+  investor         Investor         @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  status           String           @default("generating") // generating, ready, failed
   // Deterministic numbers, computed in code
   exposureUsd      Float
   impactUsd        Float
@@ -134,9 +134,9 @@ model Insight {
   // Agent output
   urgency          String? // check_in_today, good_to_know, within_your_plan
   headline         String?
-  whatHappened     String?         @db.Text
-  whatItMeans      String?         @db.Text
-  yourGoal         String?         @db.Text
+  whatHappened     String?          @db.Text
+  whatItMeans      String?          @db.Text
+  yourGoal         String?          @db.Text
   questions        Json?
   citedFacts       Json?
   complianceFlags  Json?
@@ -147,11 +147,27 @@ model Insight {
   outputTokens     Int?
   costUsd          Float?
   latencyMs        Int?
-  error            String?         @db.Text
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  error            String?          @db.Text
+  messages         InsightMessage[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   @@unique([eventId, investorId])
+}
+
+// Follow-up questions about an insight, and the answers
+model InsightMessage {
+  id              String   @id @default(cuid())
+  insightId       String
+  insight         Insight  @relation(fields: [insightId], references: [id], onDelete: Cascade)
+  role            String // user, assistant
+  content         String   @db.Text
+  quote           String?  @db.Text // the highlighted text the question is about
+  complianceFlags Json?
+  costUsd         Float?
+  createdAt       DateTime @default(now())
+
+  @@index([insightId, createdAt])
 }
 
 // --- Advisor book monitoring (the same engine, scaled to an advisor's clients) ---
