@@ -1,71 +1,65 @@
-# Crypto Pulse 📈
+# Crypto Pulse
 
-Crypto Pulse is a production-quality, real-time cryptocurrency monitoring application. It features statistical anomaly detection, whale transaction tracking, and AI-driven insights to explain market volatility.
+**When crypto crashes, Crypto Pulse tells you what it means for your money and your plan, calmly, before you panic-sell.**
 
-## 🚀 Features
+Price apps tell you "BTC −14%". Crypto Pulse tells you: *"You're down $1,407, which is 2.8% of your portfolio. That's within the 30% drop you said you were comfortable with, and you wrote that you're in this for 5+ years."* It never tells you to buy or sell. It gives you context and reminds you of your own plan.
 
-- **Real-Time Data**: Live price streaming via WebSockets and Redis.
-- **Statistical Anomaly Detection**: Uses rolling windows to detect abnormal volatility (based on standard deviation).
-- **Whale Watcher**: Monitors large transactions and correlates them with price movements.
-- **AI Insights**: Automatically generates explanations for price anomalies using LLMs (GPT-4).
-- **Interactive Dashboards**: Clean, professional UI with real-time charts and movement feeds.
-- **Alert System**: User-defined price and movement alerts with browser push notifications.
+## How it works
 
-## 🛠 Tech Stack
+1. **You write your plan while you're calm**: your positions, your time horizon, how far crypto could fall before you'd lose sleep, and your plan in your own words.
+2. **A big move happens**: live (the price tracker flags moves of 1%+), or a replay of a real historical crash from CoinGecko data.
+3. **Your impact is computed in code**, not by the AI: exact dollars and share of your portfolio.
+4. **An AI agent writes your insight**: Claude uses tools to look up the move, your plan, your positions, your computed impact, and longer-term price context, then writes what happened, what it means for you, how it relates to your plan, and questions worth asking yourself, with an urgency level.
+5. **Guardrails**: an automated check blocks buy/sell instructions, price predictions, and guarantees. Every fact is cited back to the tool it came from, and the full agent trace, time, and cost are shown.
 
-- **Frontend**: Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui, Recharts.
-- **Backend**: Custom Node.js server (server.ts), Socket.io, Redis (caching & rolling stats).
-- **Persistence**: PostgreSQL with Prisma ORM.
-- **AI/External**: OpenAI GPT-4, CoinGecko API, Web Push API.
-- **Infrastructure**: Docker & GitHub Actions (CI).
+**Compare** shows the same crash for different people. A long-term believer, someone saving for a house, and someone about to retire get very different, but equally honest, insights.
 
-## 🏗 Architecture
+## Scaling to advisors
 
-Crypto Pulse follows a service-oriented architecture:
+The engine runs per portfolio. `/advisor` runs the same agent across a financial advisor's book of 60 client households: it ranks households by dollar impact and drafts a brief plus a client message for each. Nothing is sent without advisor approval, and every draft and decision is recorded in an audit trail.
 
-- **PriceTracker**: Fetches data and updates the reactive cache.
-- **VolatilityDetector**: Runs statistical analysis on incoming streams.
-- **WhaleWatcher**: Monitors on-chain activity.
-- **AIAnalyzer**: Contextualizes events with natural language.
-- **NotificationService**: Manages real-time and background alerts.
+## Tech stack
 
-## 📦 Setup Instructions
+- **App**: Next.js 14 (App Router), TypeScript, Tailwind CSS, Recharts
+- **Server**: custom Node server (`server.ts`) with Socket.io for live prices and progress
+- **Data**: PostgreSQL + Prisma, Redis (rolling price stats, pub/sub, CoinGecko cache)
+- **AI**: Claude (Anthropic SDK tool runner) with adaptive thinking and refusal fallbacks
+- **Market data**: CoinGecko (cached, with a background warm-up and stale fallback for the free tier's rate limits)
+- **Infra**: Docker, GitHub Actions CI
 
-### Local development
+### Key files
 
-1. **Clone the repository**
-2. **Install dependencies**: `npm install`
-3. **Configure environment variables**: `cp .env.example .env`, then set `NEXTAUTH_SECRET` (e.g. `openssl rand -base64 32`) and optionally `OPENAI_API_KEY`.
-4. **Start Postgres and Redis**:
-   ```bash
-   docker compose up -d db redis
-   ```
-5. **Set up the database**:
-   ```bash
-   npx prisma db push
-   npx prisma db seed
-   ```
-6. **Run the dev server** (Next.js + Socket.io + background services):
-   ```bash
-   npm run dev:server
-   ```
+| Path | What it does |
+|---|---|
+| `services/agentCore.ts` | Shared agent engine: tool loop, traced tools, usage and cost accounting |
+| `services/insightAgent.ts` | Personal insight agent (prompt, tools, output schema) |
+| `services/briefAgent.ts` | Advisor brief agent, the same engine at advisor scale |
+| `lib/impact.ts` | Deterministic impact math the agents must quote |
+| `lib/compliance.ts` | No-advice / no-prediction checks |
+| `services/replay.ts` | Finds the worst real one-day drop of the past year |
 
-### Production build
+## Setup
+
+1. `npm install`
+2. `cp .env.example .env`, then set `NEXTAUTH_SECRET` (e.g. `openssl rand -base64 32`) and `ANTHROPIC_API_KEY`
+3. Start Postgres and Redis: `docker compose up -d db redis`
+4. Set up the database: `npx prisma db push && npx prisma db seed`
+5. Run the dev server: `npm run dev:server`, then open http://localhost:3000
+
+AI calls only happen when you ask for an insight, and each insight is cached per move and portfolio, so viewing it again is free. Live auto-explanations of price anomalies are off by default (`ENABLE_LIVE_AI_EXPLANATIONS`).
+
+### Production and Docker
 
 ```bash
-npm run build          # Next.js app
-npm run build:server   # compiles server.ts to dist/
-npm run start:server
-```
-
-### Docker
-
-Runs the app, Postgres and Redis together. Requires a `.env` with `NEXTAUTH_SECRET`.
-
-```bash
+npm run build && npm run build:server && npm run start:server
+# or
 docker compose up --build
 ```
 
-## 📜 License
+## Disclaimer
+
+Educational context only, not financial advice.
+
+## License
 
 MIT
