@@ -2,9 +2,13 @@ import { HISTORY_TTL, OVERVIEW_PATH, OVERVIEW_TTL, coingecko, historyPath } from
 
 type Overview = {
     id: string
+    symbol: string
+    name: string
     current_price: number
     market_cap: number
+    ath_change_percentage: number
     price_change_percentage_24h_in_currency: number | null
+    price_change_percentage_7d_in_currency: number | null
     price_change_percentage_30d_in_currency: number | null
 }
 
@@ -16,9 +20,14 @@ const median = (xs: number[]) => {
 
 export type CoinToday = {
     coinId: string
+    name: string
+    symbol: string
+    marketCap: number
     price: number
     change24hPct: number
+    change7dPct: number | null
     change30dPct: number | null
+    belowAllTimeHighPct: number
     typicalDailyMovePct: number // median absolute daily move over the past year
     todayVsTypical: number // |today's move| / typical move
     yearAvg: number
@@ -56,9 +65,14 @@ export async function marketToday(coinIds: string[]): Promise<MarketToday> {
         const change24h = o.price_change_percentage_24h_in_currency ?? 0
         coins[coinId] = {
             coinId,
+            name: o.name,
+            symbol: o.symbol.toUpperCase(),
+            marketCap: o.market_cap,
             price: o.current_price,
             change24hPct: round2(change24h),
+            change7dPct: o.price_change_percentage_7d_in_currency != null ? round2(o.price_change_percentage_7d_in_currency) : null,
             change30dPct: o.price_change_percentage_30d_in_currency != null ? round2(o.price_change_percentage_30d_in_currency) : null,
+            belowAllTimeHighPct: round2(o.ath_change_percentage),
             typicalDailyMovePct: round2(typical),
             todayVsTypical: typical ? round2(Math.abs(change24h) / typical) : 0,
             yearAvg: round2(avg),
