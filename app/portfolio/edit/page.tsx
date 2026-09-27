@@ -90,7 +90,7 @@ export default function EditPortfolio() {
                         <Field label="When do you need it?" hint="e.g. Spring 2027, 10+ years">
                             <input value={timeHorizon} onChange={(e) => setTimeHorizon(e.target.value)} maxLength={60} className="w-full rounded-md border bg-background p-2 text-sm" />
                         </Field>
-                        <Field label="I'm OK if crypto drops up to" hint="Before you'd start losing sleep">
+                        <Field label="Crypto loss tolerance" hint="The largest crypto drop you could sit through without selling">
                             <div className="flex items-center gap-2">
                                 <input type="number" min={1} max={100} value={dropComfortPct} onChange={(e) => setDropComfortPct(Number(e.target.value))} className="w-24 rounded-md border bg-background p-2 text-sm" />
                                 <span className="text-sm">%</span>

@@ -90,7 +90,7 @@ export default function Compare({ params }: { params: { id: string } }) {
                                         {pct(i.impact.impactPctOfTotal)} of {usd(i.impact.totalUsd, { compact: true })} · crypto is {i.impact.exposurePctOfTotal.toFixed(0)}%
                                     </div>
                                     <div className={`mt-1 text-xs ${beyondComfort ? 'text-amber-400' : 'text-emerald-400'}`}>
-                                        {beyondComfort ? `Bigger than the ${i.dropComfortPct}% drop they're OK with` : `Within the ${i.dropComfortPct}% drop they're OK with`}
+                                        {beyondComfort ? `Exceeds their ${i.dropComfortPct}% loss tolerance` : `Within their ${i.dropComfortPct}% loss tolerance`}
                                     </div>
 
                                     <div className="mt-4 flex-1 border-t pt-4">
