@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSocket } from '@/context/SocketContext'
 import { Panel, PriorityBadge, SourceBadge, Stat, StatusBadge } from '@/components/advisor/Badges'
-import { date, dateTime, pct, usd } from '@/lib/format'
+import { date, dateTime, pct, price, usd } from '@/lib/format'
 
 type Impact = {
     householdId: string
@@ -113,7 +113,7 @@ export default function EventTriage({ params }: { params: { id: string } }) {
                 </div>
                 <p className="mt-1 text-muted-foreground">
                     {event.startPrice && event.endPrice
-                        ? `${usd(event.startPrice)} → ${usd(event.endPrice)} over ${event.windowLabel ?? 'the window'}, `
+                        ? `${price(event.startPrice)} → ${price(event.endPrice)} over ${event.windowLabel ?? 'the window'}, `
                         : ''}
                     {event.source === 'replay' ? `${date(event.occurredAt)} (applied to today's book)` : dateTime(event.occurredAt)}
                 </p>
