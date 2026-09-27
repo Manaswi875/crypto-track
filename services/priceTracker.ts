@@ -4,9 +4,12 @@ import { VolatilityDetector } from './volatilityDetector'
 
 const COINGECKO_API = 'https://api.coingecko.com/api/v3'
 const SUPPORTED_COINS = ['bitcoin', 'ethereum', 'solana', 'cardano', 'ripple']
+const PRICE_HISTORY_RETENTION_HOURS = 48
+const CLEANUP_EVERY_POLLS = 120
 
 export class PriceTracker {
     private detector: VolatilityDetector
+    private pollCount = 0
 
     constructor() {
         this.detector = new VolatilityDetector()
@@ -21,6 +24,7 @@ export class PriceTracker {
 
     private async fetchPrices() {
         try {
+            this.pollCount += 1
             const ids = SUPPORTED_COINS.join(',')
             const response = await fetch(
                 `${COINGECKO_API}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true`
@@ -70,6 +74,11 @@ export class PriceTracker {
 
                 // 4. Run Volatility Detection
                 await this.detector.analyze(coinId, currentPrice)
+            }
+
+            if (this.pollCount % CLEANUP_EVERY_POLLS === 0) {
+                const cutoff = new Date(Date.now() - PRICE_HISTORY_RETENTION_HOURS * 60 * 60 * 1000)
+                await prisma.priceHistory.deleteMany({ where: { timestamp: { lt: cutoff } } })
             }
         } catch (error) {
             console.error('Error fetching prices:', error)

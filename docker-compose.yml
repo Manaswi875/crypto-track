@@ -36,6 +36,11 @@ services:
       REDIS_URL: "redis://redis:6379"
       # Read from .env in this directory
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      ALERT_EMAIL_FROM: ${ALERT_EMAIL_FROM:-}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
     depends_on:
       db:
         condition: service_healthy

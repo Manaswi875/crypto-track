@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { Panel } from '@/components/Badges'
+import { ALERT_THRESHOLDS, alertSuggestionReason, suggestedAlertThreshold } from '@/lib/alertPreferences'
 import { DRAFT_KEY, ProfileDraft } from '@/lib/draft'
 
 type CoinId = 'bitcoin' | 'ethereum' | 'solana'
@@ -22,6 +23,8 @@ export default function EditPortfolio() {
     const [cryptoReason, setCryptoReason] = useState('')
     const [timeHorizon, setTimeHorizon] = useState('')
     const [dropComfortPct, setDropComfortPct] = useState(30)
+    const [alertEnabled, setAlertEnabled] = useState(true)
+    const [alertThresholdPct, setAlertThresholdPct] = useState(7)
     const [crypto, setCrypto] = useState<CryptoHolding[]>([])
     const [cashUsd, setCashUsd] = useState(0)
     const [investmentsUsd, setInvestmentsUsd] = useState(0)
@@ -39,6 +42,8 @@ export default function EditPortfolio() {
             setCryptoReason(investor.cryptoReason ?? '')
             setTimeHorizon(investor.timeHorizon)
             setDropComfortPct(investor.dropComfortPct)
+            setAlertEnabled(investor.alertEnabled ?? true)
+            setAlertThresholdPct(investor.alertThresholdPct ?? 7)
             setCrypto(
                 positions
                     .filter((p) => p.coinId)
@@ -64,6 +69,7 @@ export default function EditPortfolio() {
                 if (d.cryptoReason) setCryptoReason(d.cryptoReason)
                 if (d.timeHorizon) setTimeHorizon(d.timeHorizon)
                 if (d.dropComfortPct != null) setDropComfortPct(d.dropComfortPct)
+                setAlertThresholdPct(suggestedAlertThreshold(d.timeHorizon ?? investor.timeHorizon, d.dropComfortPct ?? investor.dropComfortPct))
                 if (d.crypto.length)
                     setCrypto(
                         d.crypto.map((c) => ({
@@ -87,7 +93,7 @@ export default function EditPortfolio() {
         const res = await fetch('/api/investors/you', {
             method: 'PUT',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ goal, cryptoReason, timeHorizon, dropComfortPct, crypto, cashUsd, investmentsUsd }),
+            body: JSON.stringify({ goal, cryptoReason, timeHorizon, dropComfortPct, alertEnabled, alertThresholdPct, crypto, cashUsd, investmentsUsd }),
         })
         setSaving(false)
         if (!res.ok) return setError((await res.json()).error ?? 'Could not save')
@@ -98,6 +104,7 @@ export default function EditPortfolio() {
     }
 
     const update = (idx: number, patch: Partial<CryptoHolding>) => setCrypto((cs) => cs.map((c, i) => (i === idx ? { ...c, ...patch } : c)))
+    const suggestedThreshold = suggestedAlertThreshold(timeHorizon, dropComfortPct)
 
     if (!loaded) return <div className="text-muted-foreground">Loading…</div>
 
@@ -161,6 +168,54 @@ export default function EditPortfolio() {
                             </div>
                         </Field>
                     </div>
+                </div>
+            </Panel>
+
+            <Panel title="Crash alerts" action={<span className="text-xs text-muted-foreground">Slack or email, when connected</span>}>
+                <div className="space-y-4">
+                    <label className="flex items-start gap-3 rounded-lg border p-3">
+                        <input type="checkbox" checked={alertEnabled} onChange={(e) => setAlertEnabled(e.target.checked)} className="mt-1 h-4 w-4 accent-primary" />
+                        <span>
+                            <span className="block text-sm font-medium">Send me external alerts for major drops</span>
+                            <span className="block text-xs text-muted-foreground">Smaller unusual moves still appear inside Crypto Pulse without interrupting you.</span>
+                        </span>
+                    </label>
+
+                    {alertEnabled && (
+                        <div className="space-y-3">
+                            <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                        <p className="text-sm font-medium text-violet-200">Suggested: alert at a {suggestedThreshold}% drop</p>
+                                        <p className="mt-0.5 text-xs text-muted-foreground">{alertSuggestionReason(suggestedThreshold)}</p>
+                                    </div>
+                                    {alertThresholdPct !== suggestedThreshold && (
+                                        <button onClick={() => setAlertThresholdPct(suggestedThreshold)} className="rounded-md border border-violet-500/40 px-2.5 py-1 text-xs font-medium text-violet-200 hover:bg-violet-500/10">Use suggestion</button>
+                                    )}
+                                </div>
+                            </div>
+
+                            <fieldset>
+                                <legend className="text-sm font-medium">When should we interrupt you?</legend>
+                                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                    {ALERT_THRESHOLDS.map((threshold) => (
+                                        <label key={threshold} className={`cursor-pointer rounded-lg border p-3 transition-colors ${alertThresholdPct === threshold ? 'border-primary bg-primary/10' : 'hover:bg-secondary/40'}`}>
+                                            <input type="radio" name="alertThreshold" value={threshold} checked={alertThresholdPct === threshold} onChange={() => setAlertThresholdPct(threshold)} className="sr-only" />
+                                            <span className="block text-sm font-semibold">{threshold}% drop</span>
+                                            <span className="block text-xs text-muted-foreground">{threshold === 5 ? 'More alerts' : threshold === 7 ? 'Balanced' : 'Major crashes only'}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </fieldset>
+
+                            <Field label="Custom threshold" hint="Choose any drop from 3% to 20%">
+                                <div className="flex items-center gap-2">
+                                    <input type="number" min={3} max={20} value={alertThresholdPct} onChange={(e) => setAlertThresholdPct(Number(e.target.value))} className="w-24 rounded-md border bg-background p-2 text-sm" />
+                                    <span className="text-sm">%</span>
+                                </div>
+                            </Field>
+                        </div>
+                    )}
                 </div>
             </Panel>
 

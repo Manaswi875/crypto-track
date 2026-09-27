@@ -20,7 +20,8 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     const [isConnected, setIsConnected] = useState(false)
 
     useEffect(() => {
-        const socketInstance = io(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000')
+        // Same origin as the page unless a separate socket host is configured
+        const socketInstance = process.env.NEXT_PUBLIC_SITE_URL ? io(process.env.NEXT_PUBLIC_SITE_URL) : io()
 
         socketInstance.on('connect', () => {
             setIsConnected(true)
