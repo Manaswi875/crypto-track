@@ -6,8 +6,8 @@ import { useEffect, useState } from 'react'
 import { Panel } from '@/components/advisor/Badges'
 
 type CoinId = 'bitcoin' | 'ethereum' | 'solana'
-type CryptoHolding = { coinId: CoinId; heldVia: 'fund' | 'direct'; fund: string; marketValue: number }
-type StoredPosition = { symbol: string; assetClass: string; coinId: CoinId | null; marketValue: number }
+type CryptoHolding = { coinId: CoinId; heldVia: 'fund' | 'direct'; fund: string; marketValue: number; investedUsd: number | null }
+type StoredPosition = { symbol: string; assetClass: string; coinId: CoinId | null; marketValue: number; investedUsd: number | null }
 
 const COINS: { id: CoinId; label: string; funds: string[] }[] = [
     { id: 'bitcoin', label: 'Bitcoin', funds: ['IBIT', 'FBTC'] },
@@ -45,6 +45,7 @@ export default function EditPortfolio() {
                         heldVia: p.assetClass === 'crypto_etf' ? 'fund' : 'direct',
                         fund: p.assetClass === 'crypto_etf' ? p.symbol : '',
                         marketValue: p.marketValue,
+                        investedUsd: p.investedUsd,
                     })),
             )
             setCashUsd(positions.filter((p) => p.assetClass === 'cash').reduce((s, p) => s + p.marketValue, 0))
@@ -100,7 +101,7 @@ export default function EditPortfolio() {
                 </div>
             </Panel>
 
-            <Panel title="Your crypto">
+            <Panel title="Your crypto" action={<span className="text-xs text-muted-foreground">&ldquo;You put in&rdquo; shows your profit or loss</span>}>
                 <div className="space-y-3">
                     {crypto.map((c, idx) => {
                         const coin = COINS.find((x) => x.id === c.coinId)!
@@ -128,7 +129,14 @@ export default function EditPortfolio() {
                                         <option key={f} value={f}>Through the {f} fund</option>
                                     ))}
                                 </select>
-                                <Money value={c.marketValue} onChange={(v) => update(idx, { marketValue: v })} />
+                                <label className="text-xs text-muted-foreground">
+                                    Worth now
+                                    <Money value={c.marketValue} onChange={(v) => update(idx, { marketValue: v })} />
+                                </label>
+                                <label className="text-xs text-muted-foreground">
+                                    You put in
+                                    <Money value={c.investedUsd ?? 0} onChange={(v) => update(idx, { investedUsd: v > 0 ? v : null })} />
+                                </label>
                                 <button onClick={() => setCrypto((cs) => cs.filter((_, i) => i !== idx))} className="px-2 text-muted-foreground hover:text-red-400" aria-label="Remove">
                                     ✕
                                 </button>
@@ -136,7 +144,7 @@ export default function EditPortfolio() {
                         )
                     })}
                     <button
-                        onClick={() => setCrypto((cs) => [...cs, { coinId: 'bitcoin', heldVia: 'fund', fund: 'IBIT', marketValue: 5000 }])}
+                        onClick={() => setCrypto((cs) => [...cs, { coinId: 'bitcoin', heldVia: 'fund', fund: 'IBIT', marketValue: 5000, investedUsd: null }])}
                         className="rounded-md border px-3 py-1.5 text-sm hover:bg-secondary"
                     >
                         + Add crypto
@@ -165,7 +173,7 @@ export default function EditPortfolio() {
                     {saving ? 'Saving…' : 'Save'}
                 </button>
             </div>
-            <p className="text-xs text-muted-foreground">Saving clears earlier insights for your portfolio, since the numbers they quoted may no longer be right.</p>
+            <p className="text-xs text-muted-foreground">If you change your amounts or goal, earlier insights are cleared, since the numbers they quoted would no longer be right.</p>
         </div>
     )
 }

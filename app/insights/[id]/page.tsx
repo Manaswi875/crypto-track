@@ -150,9 +150,6 @@ export default function InsightPage({ params }: { params: { id: string } }) {
                                         {s.investor.name}
                                     </Link>
                                 ))}
-                            <Link href={`/events/${i.eventId}`} className="text-primary hover:underline">
-                                Compare side by side →
-                            </Link>
                         </div>
                     )}
 

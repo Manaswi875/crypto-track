@@ -36,6 +36,7 @@ const CryptoHolding = z.object({
     heldVia: z.enum(['fund', 'direct']),
     fund: z.string().trim().max(12).optional(), // e.g. IBIT, when held through a fund
     marketValue: z.number().positive().max(1e10),
+    investedUsd: z.number().positive().max(1e10).nullable().optional(),
 })
 
 const Body = z.object({
@@ -56,8 +57,8 @@ function toPositions(body: z.infer<typeof Body>) {
         const [symbol, name] = COIN[c.coinId]
         const fund = c.fund?.toUpperCase()
         return c.heldVia === 'fund'
-            ? { symbol: fund || symbol, name: `${name} (${fund ? `${fund} fund` : 'fund'})`, assetClass: 'crypto_etf', coinId: c.coinId, marketValue: c.marketValue }
-            : { symbol, name: `${name} (held directly)`, assetClass: 'crypto', coinId: c.coinId, marketValue: c.marketValue }
+            ? { symbol: fund || symbol, name: `${name} (${fund ? `${fund} fund` : 'fund'})`, assetClass: 'crypto_etf', coinId: c.coinId, marketValue: c.marketValue, investedUsd: c.investedUsd ?? null }
+            : { symbol, name: `${name} (held directly)`, assetClass: 'crypto', coinId: c.coinId, marketValue: c.marketValue, investedUsd: c.investedUsd ?? null }
     })
     const other = [
         { symbol: 'CASH', name: 'Cash & savings', assetClass: 'cash', coinId: null, marketValue: body.cashUsd },
@@ -77,11 +78,16 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const { goal, cryptoReason, timeHorizon, dropComfortPct } = parsed.data
     const positions = toPositions(parsed.data)
 
-    // Numbers changed, so earlier insights no longer describe this portfolio
+    // Insights quote these numbers, so clear them only if something they depend on changed
+    const current = await prisma.investor.findUniqueOrThrow({ where: { id: investor.id }, include: { positions: true } })
+    const fingerprint = (x: { goal: string; cryptoReason: string; timeHorizon: string; dropComfortPct: number; positions: { name: string; coinId: string | null; marketValue: number }[] }) =>
+        JSON.stringify([x.goal, x.cryptoReason, x.timeHorizon, x.dropComfortPct, x.positions.map((p) => [p.name, p.coinId, p.marketValue]).sort()])
+    const changed = fingerprint(current) !== fingerprint({ goal, cryptoReason, timeHorizon, dropComfortPct, positions })
+
     await prisma.$transaction([
         prisma.position.deleteMany({ where: { investorId: investor.id } }),
-        prisma.insight.deleteMany({ where: { investorId: investor.id } }),
+        ...(changed ? [prisma.insight.deleteMany({ where: { investorId: investor.id } })] : []),
         prisma.investor.update({ where: { id: investor.id }, data: { goal, cryptoReason, timeHorizon, dropComfortPct, positions: { create: positions } } }),
     ])
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, insightsCleared: changed })
 }

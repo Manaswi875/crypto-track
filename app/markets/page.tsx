@@ -232,8 +232,8 @@ export default function Markets() {
                                                 {e.source === 'replay' ? date(e.occurredAt) : dateTime(e.occurredAt)} <SourceBadge source={e.source} />
                                             </div>
                                         </div>
-                                        <Link href={`/events/${e.id}`} className="shrink-0 text-xs font-medium text-primary hover:underline">
-                                            Who it affects →
+                                        <Link href="/" className="shrink-0 text-xs font-medium text-primary hover:underline">
+                                            What it means for me →
                                         </Link>
                                     </li>
                                 ))}
