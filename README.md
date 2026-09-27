@@ -38,6 +38,10 @@ The engine runs per portfolio: the same tools, prompt rules, and impact math wor
 | `lib/compliance.ts` | No-advice / no-prediction checks |
 | `services/replay.ts` | Finds distinct real crash days from the past year, with every coin's move |
 
+## Quality checks
+
+`npm run eval` grades every saved insight without calling the model: every dollar and percentage in the text must appear in the data the agent actually looked up (its tool calls are recorded), no advice or predictions, under 120 words, urgency consistent with the investor's loss tolerance, and sources cited. Follow-up answers are checked for advice too.
+
 ## Setup
 
 1. `npm install`
