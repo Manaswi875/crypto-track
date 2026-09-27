@@ -121,3 +121,21 @@ export async function createReplayEvent(date: string, actor: string) {
     await audit('event_created', actor, 'event', event.id, { source: 'replay', date, moves })
     return { event, created: true }
 }
+
+let ensured: Promise<void> | null = null
+
+/**
+ * Make sure every past-crash option exists as an event, so the app always
+ * shows the same set of real crashes. Runs once per server process; if price
+ * history is unavailable it tries again on the next call.
+ */
+export function ensureCrashEvents() {
+    ensured ??= (async () => {
+        const options = await listCrashOptions()
+        for (const o of options) await createReplayEvent(o.date, 'system')
+    })().catch((err) => {
+        ensured = null
+        console.warn('[REPLAY] Could not load past crashes:', err instanceof Error ? err.message : err)
+    })
+    return ensured
+}

@@ -218,7 +218,7 @@ export default function Markets() {
 
                     <Panel title="Recent big moves">
                         {events.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">No big moves saved yet. Replay one from My Portfolio.</p>
+                            <p className="text-sm text-muted-foreground">No big moves yet.</p>
                         ) : (
                             <ul className="divide-y">
                                 {events.map((e) => (

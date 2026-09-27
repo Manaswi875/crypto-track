@@ -32,12 +32,8 @@ type Overview = {
     }
 }
 
-const REPLAY_COINS = ['bitcoin', 'ethereum', 'solana'] as const
-
 export default function BookMonitor() {
     const [data, setData] = useState<Overview | null>(null)
-    const [replaying, setReplaying] = useState<string | null>(null)
-    const [error, setError] = useState<string | null>(null)
 
     const load = useCallback(async () => {
         const res = await fetch('/api/advisor/overview')
@@ -47,23 +43,6 @@ export default function BookMonitor() {
     useEffect(() => {
         load()
     }, [load])
-
-    async function replay(coinId: string) {
-        setReplaying(coinId)
-        setError(null)
-        const res = await fetch('/api/events/replay', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ coinId }),
-        })
-        setReplaying(null)
-        if (!res.ok) {
-            setError((await res.json()).error ?? 'Replay failed')
-            return
-        }
-        const { event } = await res.json()
-        window.location.href = `/advisor/events/${event.id}`
-    }
 
     if (!data) return <div className="text-muted-foreground">Loading book…</div>
 
@@ -107,30 +86,10 @@ export default function BookMonitor() {
                 <Panel
                     className="lg:col-span-2"
                     title="Market events"
-                    action={<span className="text-xs text-muted-foreground">Live anomalies from the price tracker, plus historical replays</span>}
+                    action={<span className="text-xs text-muted-foreground">Live moves, plus real crashes from the past year</span>}
                 >
-                    <div className="mb-5 rounded-lg border border-dashed p-4">
-                        <div className="text-sm font-medium">Replay a real market move</div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            Pulls a year of daily closes from CoinGecko, finds the largest one-day drop, and applies it to today&apos;s book.
-                        </p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                            {REPLAY_COINS.map((coin) => (
-                                <button
-                                    key={coin}
-                                    onClick={() => replay(coin)}
-                                    disabled={replaying !== null}
-                                    className="rounded-md border bg-secondary px-3 py-1.5 text-sm font-medium hover:bg-secondary/70 disabled:opacity-50"
-                                >
-                                    {replaying === coin ? 'Fetching history…' : `Replay worst ${COIN_SYMBOL[coin]} day`}
-                                </button>
-                            ))}
-                        </div>
-                        {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
-                    </div>
-
                     {data.events.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No events yet. Replay one above, or wait for the live detector.</p>
+                        <p className="text-sm text-muted-foreground">No events yet.</p>
                     ) : (
                         <ul className="divide-y">
                             {data.events.map((e) => (

@@ -6,7 +6,9 @@ const WINDOW_SIZE = 20 // Number of observations for rolling stats
 const STDEV_MULTIPLIER = 2.5 // k factor for anomaly detection
 // With 30s samples the rolling stdev is tiny, so 2.5σ alone flags ~0.1% noise.
 // Require a meaningful move, and at most one event per coin per cooldown window.
-const MIN_MOVE_PCT = 1
+const MIN_MOVE_PCT = 3
+// Only raise events for coins people can hold in the app
+const EVENT_COINS = new Set(['bitcoin', 'ethereum', 'solana'])
 const COOLDOWN_SECONDS = 30 * 60
 
 export class VolatilityDetector {
@@ -43,7 +45,7 @@ export class VolatilityDetector {
 
         const changePct = ((currentPrice - mean) / mean) * 100
 
-        if (priceChange > threshold && stdDev > 0 && Math.abs(changePct) >= MIN_MOVE_PCT) {
+        if (EVENT_COINS.has(coinId) && priceChange > threshold && stdDev > 0 && Math.abs(changePct) >= MIN_MOVE_PCT) {
             const fresh = await redis.set(`volatility-cooldown:${coinId}`, '1', 'EX', COOLDOWN_SECONDS, 'NX')
             if (!fresh) return
 
