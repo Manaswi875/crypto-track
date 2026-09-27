@@ -116,6 +116,7 @@ model Position {
   assetClass  String // crypto_etf, crypto, cash, investments
   coinId      String? // underlying crypto exposure
   marketValue Float
+  investedUsd Float? // what they put in, for gain/loss if they sold today
 
   @@index([investorId])
 }

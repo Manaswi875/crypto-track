@@ -193,15 +193,15 @@ async function seedAdvisorBook() {
     console.log(`Seeded advisor book: ${households} households, ${withCrypto} with crypto exposure.`)
 }
 
-type PositionSeed = { symbol: string; name: string; assetClass: string; coinId?: string; marketValue: number }
+type PositionSeed = { symbol: string; name: string; assetClass: string; coinId?: string; marketValue: number; investedUsd?: number }
 
 // Crypto in detail; everything else as two simple buckets
 const cash = (marketValue: number): PositionSeed => ({ symbol: 'CASH', name: 'Cash & savings', assetClass: 'cash', marketValue })
 const investments = (marketValue: number): PositionSeed => ({ symbol: 'INVEST', name: 'Stocks & bonds', assetClass: 'investments', marketValue })
-const bitcoinFund = (symbol: 'IBIT' | 'FBTC', marketValue: number): PositionSeed => ({ symbol, name: `Bitcoin (${symbol} fund)`, assetClass: 'crypto_etf', coinId: 'bitcoin', marketValue })
-const direct = (coinId: 'bitcoin' | 'ethereum' | 'solana', marketValue: number): PositionSeed => {
+const bitcoinFund = (symbol: 'IBIT' | 'FBTC', marketValue: number, investedUsd: number): PositionSeed => ({ symbol, name: `Bitcoin (${symbol} fund)`, assetClass: 'crypto_etf', coinId: 'bitcoin', marketValue, investedUsd })
+const direct = (coinId: 'bitcoin' | 'ethereum' | 'solana', marketValue: number, investedUsd: number): PositionSeed => {
     const coin = { bitcoin: ['BTC', 'Bitcoin'], ethereum: ['ETH', 'Ethereum'], solana: ['SOL', 'Solana'] }[coinId]
-    return { symbol: coin[0], name: `${coin[1]} (held directly)`, assetClass: 'crypto', coinId, marketValue }
+    return { symbol: coin[0], name: `${coin[1]} (held directly)`, assetClass: 'crypto', coinId, marketValue, investedUsd }
 }
 
 const INVESTORS: {
@@ -226,7 +226,7 @@ const INVESTORS: {
         timeHorizon: '5+ years',
         dropComfortPct: 30,
         isDemo: false,
-        positions: [bitcoinFund('IBIT', 10000), cash(10000), investments(30000)],
+        positions: [bitcoinFund('IBIT', 10000, 12000), cash(10000), investments(30000)],
     },
     {
         id: 'rohan',
@@ -238,7 +238,7 @@ const INVESTORS: {
         timeHorizon: '10+ years',
         dropComfortPct: 50,
         isDemo: true,
-        positions: [bitcoinFund('IBIT', 22000), direct('ethereum', 9000), direct('solana', 4000), cash(12000), investments(38000)],
+        positions: [bitcoinFund('IBIT', 22000, 15000), direct('ethereum', 9000, 11000), direct('solana', 4000, 5500), cash(12000), investments(38000)],
     },
     {
         id: 'sofia',
@@ -250,7 +250,7 @@ const INVESTORS: {
         timeHorizon: 'Spring 2027',
         dropComfortPct: 20,
         isDemo: true,
-        positions: [bitcoinFund('IBIT', 18000), cash(90000), investments(60000)],
+        positions: [bitcoinFund('IBIT', 18000, 24000), cash(90000), investments(60000)],
     },
     {
         id: 'robert',
@@ -262,7 +262,7 @@ const INVESTORS: {
         timeHorizon: 'Summer 2027',
         dropComfortPct: 10,
         isDemo: true,
-        positions: [bitcoinFund('FBTC', 25000), cash(60000), investments(500000)],
+        positions: [bitcoinFund('FBTC', 25000, 20000), cash(60000), investments(500000)],
     },
 ]
 

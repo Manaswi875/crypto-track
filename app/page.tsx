@@ -256,9 +256,6 @@ export default function MyPortfolio() {
                                                                     {busy === `explain:${e.id}` ? 'Starting…' : 'What does this mean for me?'}
                                                                 </button>
                                                             ))}
-                                                        <Link href={`/events/${e.id}`} className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-secondary">
-                                                            Compare
-                                                        </Link>
                                                     </div>
                                                 </li>
                                             )
@@ -290,7 +287,7 @@ export default function MyPortfolio() {
                                 </dl>
                             </Panel>
 
-                            <MoneyPanel title={inv.isDemo ? `${inv.name}'s money` : 'Your money'} positions={inv.positions} total={total} />
+                            <MoneyPanel title={inv.isDemo ? `${inv.name}'s money` : 'Your money'} positions={inv.positions} total={total} investorId={inv.id} />
                         </div>
                     </div>
 
@@ -312,7 +309,7 @@ const splitName = (name: string) => {
     return m ? [m[1], m[2]] : [name, '']
 }
 
-function MoneyPanel({ title, positions, total }: { title: string; positions: Position[]; total: number }) {
+function MoneyPanel({ title, positions, total, investorId }: { title: string; positions: Position[]; total: number; investorId: string }) {
     const share = (v: number) => (total ? `${((v / total) * 100).toFixed(0)}%` : '0%')
     const buckets = BUCKETS.map((b) => {
         const items = positions.filter(b.match)
@@ -340,6 +337,9 @@ function MoneyPanel({ title, positions, total }: { title: string; positions: Pos
 
             {crypto && (
                 <div className="mt-5">
+                    <Link href={`/sell-check?investor=${investorId}`} className="mb-4 block rounded-md border px-3 py-2 text-center text-sm font-medium hover:bg-secondary">
+                        Before you sell: today&apos;s market and your profit or loss →
+                    </Link>
                     <div className="mb-2 flex justify-between text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         <span>Crypto</span>
                         <span className="tabular-nums">{usd(crypto.value)}</span>
