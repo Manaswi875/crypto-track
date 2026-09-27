@@ -25,9 +25,8 @@ type InvestorData = {
         name: string
         tagline: string
         age: number | null
-        riskComfort: string
         timeHorizon: string
-        plan: string
+        goal: string
         dropComfortPct: number
         isDemo: boolean
         positions: Position[]
@@ -278,7 +277,7 @@ export default function MyPortfolio() {
 
                         <div className="space-y-6">
                             <Panel
-                                title={inv.isDemo ? `${inv.name}'s plan` : 'Your plan'}
+                                title={inv.isDemo ? `${inv.name}'s goal` : 'Your goal'}
                                 action={
                                     !inv.isDemo && (
                                         <Link href="/portfolio/edit" className="text-xs font-medium text-primary hover:underline">
@@ -287,32 +286,14 @@ export default function MyPortfolio() {
                                     )
                                 }
                             >
-                                <blockquote className="border-l-2 border-primary/50 pl-3 text-sm italic leading-relaxed">&ldquo;{inv.plan}&rdquo;</blockquote>
-                                <dl className="mt-4 space-y-2 text-sm">
-                                    <Row label="Time horizon" value={inv.timeHorizon} />
-                                    <Row label="Risk comfort" value={<span className="capitalize">{inv.riskComfort}</span>} />
+                                <p className="text-lg font-semibold leading-snug">{inv.goal}</p>
+                                <dl className="mt-3 space-y-2 text-sm">
+                                    <Row label="Needs the money" value={inv.timeHorizon} />
                                     <Row label="OK if crypto drops up to" value={`${inv.dropComfortPct}%`} />
                                 </dl>
                             </Panel>
 
-                            <Panel title="Positions">
-                                <ul className="space-y-2 text-sm">
-                                    {inv.positions.map((p) => (
-                                        <li key={p.id}>
-                                            <div className="flex items-center justify-between gap-3">
-                                                <span className={p.coinId ? 'text-amber-300' : ''}>
-                                                    <span className="font-medium">{p.symbol}</span>{' '}
-                                                    <span className={p.coinId ? 'text-amber-300/70' : 'text-muted-foreground'}>{p.name}</span>
-                                                </span>
-                                                <span className="tabular-nums">{usd(p.marketValue)}</span>
-                                            </div>
-                                            <div className="mt-1 h-1 rounded bg-secondary">
-                                                <div className={`h-1 rounded ${p.coinId ? 'bg-amber-400' : 'bg-primary/60'}`} style={{ width: `${(p.marketValue / total) * 100}%` }} />
-                                            </div>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </Panel>
+                            <MoneyPanel title={inv.isDemo ? `${inv.name}'s money` : 'Your money'} positions={inv.positions} total={total} />
                         </div>
                     </div>
 
@@ -320,6 +301,96 @@ export default function MyPortfolio() {
                 </>
             )}
         </div>
+    )
+}
+
+const BUCKETS = [
+    { key: 'crypto', label: 'Crypto', dot: 'bg-amber-400', match: (p: Position) => !!p.coinId },
+    { key: 'cash', label: 'Cash & savings', dot: 'bg-sky-400', match: (p: Position) => p.assetClass === 'cash' },
+    { key: 'investments', label: 'Stocks & bonds', dot: 'bg-violet-400', match: (p: Position) => !p.coinId && p.assetClass !== 'cash' },
+]
+
+/** "Bitcoin (IBIT fund)" -> ["Bitcoin", "IBIT fund"] */
+const splitName = (name: string) => {
+    const m = name.match(/^(.*?)\s*\((.*)\)$/)
+    return m ? [m[1], m[2]] : [name, '']
+}
+
+function MoneyPanel({ title, positions, total }: { title: string; positions: Position[]; total: number }) {
+    const share = (v: number) => (total ? `${((v / total) * 100).toFixed(0)}%` : '0%')
+    const buckets = BUCKETS.map((b) => {
+        const items = positions.filter(b.match)
+        return { ...b, items, value: items.reduce((s, p) => s + p.marketValue, 0) }
+    }).filter((b) => b.value > 0)
+    const crypto = buckets.find((b) => b.key === 'crypto')
+    const rest = buckets.filter((b) => b.key !== 'crypto')
+
+    return (
+        <Panel title={title} action={<span className="text-sm font-semibold tabular-nums">{usd(total)}</span>}>
+            {/* Split of everything they have */}
+            <div className="flex h-2.5 overflow-hidden rounded-full bg-secondary">
+                {buckets.map((b) => (
+                    <div key={b.key} className={b.dot} style={{ width: `${(b.value / total) * 100}%` }} />
+                ))}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                {buckets.map((b) => (
+                    <span key={b.key} className="flex items-center gap-1.5">
+                        <span className={`h-2 w-2 rounded-full ${b.dot}`} />
+                        {b.label} {share(b.value)}
+                    </span>
+                ))}
+            </div>
+
+            {crypto && (
+                <div className="mt-5">
+                    <div className="mb-2 flex justify-between text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        <span>Crypto</span>
+                        <span className="tabular-nums">{usd(crypto.value)}</span>
+                    </div>
+                    <ul className="space-y-2.5 text-sm">
+                        {crypto.items.map((p) => {
+                            const [coin, via] = splitName(p.name)
+                            return (
+                                <li key={p.id} className="flex items-center justify-between gap-3">
+                                    <span className="flex items-center gap-2">
+                                        <span className="h-2 w-2 rounded-full bg-amber-400" />
+                                        <span>
+                                            <span className="font-medium">{coin}</span>
+                                            {via && <span className="block text-xs text-muted-foreground">{via}</span>}
+                                        </span>
+                                    </span>
+                                    <span className="text-right tabular-nums">
+                                        {usd(p.marketValue)}
+                                        <span className="block text-xs text-muted-foreground">{share(p.marketValue)} of total</span>
+                                    </span>
+                                </li>
+                            )
+                        })}
+                    </ul>
+                </div>
+            )}
+
+            {rest.length > 0 && (
+                <div className="mt-5">
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Everything else</div>
+                    <ul className="space-y-2.5 text-sm">
+                        {rest.map((b) => (
+                            <li key={b.key} className="flex items-center justify-between gap-3">
+                                <span className="flex items-center gap-2">
+                                    <span className={`h-2 w-2 rounded-full ${b.dot}`} />
+                                    <span className="font-medium">{b.label}</span>
+                                </span>
+                                <span className="text-right tabular-nums">
+                                    {usd(b.value)}
+                                    <span className="block text-xs text-muted-foreground">{share(b.value)} of total</span>
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </Panel>
     )
 }
 

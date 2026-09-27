@@ -195,15 +195,23 @@ async function seedAdvisorBook() {
 
 type PositionSeed = { symbol: string; name: string; assetClass: string; coinId?: string; marketValue: number }
 
+// Crypto in detail; everything else as two simple buckets
+const cash = (marketValue: number): PositionSeed => ({ symbol: 'CASH', name: 'Cash & savings', assetClass: 'cash', marketValue })
+const investments = (marketValue: number): PositionSeed => ({ symbol: 'INVEST', name: 'Stocks & bonds', assetClass: 'investments', marketValue })
+const bitcoinFund = (symbol: 'IBIT' | 'FBTC', marketValue: number): PositionSeed => ({ symbol, name: `Bitcoin (${symbol} fund)`, assetClass: 'crypto_etf', coinId: 'bitcoin', marketValue })
+const direct = (coinId: 'bitcoin' | 'ethereum' | 'solana', marketValue: number): PositionSeed => {
+    const coin = { bitcoin: ['BTC', 'Bitcoin'], ethereum: ['ETH', 'Ethereum'], solana: ['SOL', 'Solana'] }[coinId]
+    return { symbol: coin[0], name: `${coin[1]} (held directly)`, assetClass: 'crypto', coinId, marketValue }
+}
+
 const INVESTORS: {
     id: string
     name: string
     tagline: string
     age: number | null
-    riskComfort: string
+    goal: string
     timeHorizon: string
     dropComfortPct: number
-    plan: string
     isDemo: boolean
     positions: PositionSeed[]
 }[] = [
@@ -212,69 +220,44 @@ const INVESTORS: {
         name: 'You',
         tagline: 'Your own portfolio',
         age: null,
-        riskComfort: 'medium',
+        goal: 'Grow my savings long-term',
         timeHorizon: '5+ years',
         dropComfortPct: 30,
-        plan: 'Long-term investor. Crypto is a small part of my savings, and I want to understand big moves without being told what to do.',
         isDemo: false,
-        positions: [
-            { symbol: 'VTI', name: 'Vanguard Total Stock Market ETF', assetClass: 'equity', marketValue: 30000 },
-            { symbol: 'IBIT', name: 'iShares Bitcoin Trust ETF', assetClass: 'crypto_etf', coinId: 'bitcoin', marketValue: 10000 },
-            { symbol: 'SWVXX', name: 'Schwab Value Advantage Money Fund', assetClass: 'cash', marketValue: 10000 },
-        ],
+        positions: [bitcoinFund('IBIT', 10000), cash(10000), investments(30000)],
     },
     {
         id: 'rohan',
         name: 'Rohan',
         tagline: 'Long-term crypto believer',
         age: 29,
-        riskComfort: 'high',
+        goal: 'Grow my wealth over the next decade',
         timeHorizon: '10+ years',
         dropComfortPct: 50,
-        plan: "I'm in crypto for the long haul, at least 10 years. I've sat through crashes before and I don't want to hear about every dip. Only flag something if it's genuinely unusual. I keep 6 months of expenses in cash, separately.",
         isDemo: true,
-        positions: [
-            { symbol: 'VTI', name: 'Vanguard Total Stock Market ETF', assetClass: 'equity', marketValue: 38000 },
-            { symbol: 'IBIT', name: 'iShares Bitcoin Trust ETF', assetClass: 'crypto_etf', coinId: 'bitcoin', marketValue: 22000 },
-            { symbol: 'SWVXX', name: 'Schwab Value Advantage Money Fund', assetClass: 'cash', marketValue: 12000 },
-            { symbol: 'ETH', name: 'Ethereum (on Coinbase)', assetClass: 'crypto', coinId: 'ethereum', marketValue: 9000 },
-            { symbol: 'SOL', name: 'Solana (on Coinbase)', assetClass: 'crypto', coinId: 'solana', marketValue: 4000 },
-        ],
+        positions: [bitcoinFund('IBIT', 22000), direct('ethereum', 9000), direct('solana', 4000), cash(12000), investments(38000)],
     },
     {
         id: 'sofia',
         name: 'Sofia',
         tagline: 'Saving for a house',
         age: 36,
-        riskComfort: 'medium',
-        timeHorizon: 'Buying a home around spring 2027',
+        goal: 'Buy our first home',
+        timeHorizon: 'Spring 2027',
         dropComfortPct: 20,
-        plan: "We're buying our first home around spring 2027. The down payment is in a money market fund and I don't want to touch it. The Bitcoin ETF is a small long-term bet I bought near the highs. Red numbers make me anxious, and I've panic-sold before and regretted it.",
         isDemo: true,
-        positions: [
-            { symbol: 'SWVXX', name: 'Schwab Value Advantage Money Fund', assetClass: 'cash', marketValue: 90000 },
-            { symbol: 'VTI', name: 'Vanguard Total Stock Market ETF', assetClass: 'equity', marketValue: 45000 },
-            { symbol: 'IBIT', name: 'iShares Bitcoin Trust ETF', assetClass: 'crypto_etf', coinId: 'bitcoin', marketValue: 18000 },
-            { symbol: 'BND', name: 'Vanguard Total Bond Market ETF', assetClass: 'fixed_income', marketValue: 15000 },
-        ],
+        positions: [bitcoinFund('IBIT', 18000), cash(90000), investments(60000)],
     },
     {
         id: 'robert',
         name: 'Robert',
         tagline: 'Retiring next year',
         age: 63,
-        riskComfort: 'low',
-        timeHorizon: 'Retiring summer 2027, then drawing income',
+        goal: 'Retire and live off my savings',
+        timeHorizon: 'Summer 2027',
         dropComfortPct: 10,
-        plan: "I retire next summer and will start living off this portfolio. My son convinced me to put a little into Bitcoin. I don't really understand it, and the headlines make me nervous. I want steady and boring.",
         isDemo: true,
-        positions: [
-            { symbol: 'BND', name: 'Vanguard Total Bond Market ETF', assetClass: 'fixed_income', marketValue: 260000 },
-            { symbol: 'SCHD', name: 'Schwab U.S. Dividend Equity ETF', assetClass: 'equity', marketValue: 150000 },
-            { symbol: 'VTIP', name: 'Vanguard Short-Term Inflation-Protected Securities ETF', assetClass: 'fixed_income', marketValue: 90000 },
-            { symbol: 'SWVXX', name: 'Schwab Value Advantage Money Fund', assetClass: 'cash', marketValue: 60000 },
-            { symbol: 'FBTC', name: 'Fidelity Wise Origin Bitcoin Fund', assetClass: 'crypto_etf', coinId: 'bitcoin', marketValue: 25000 },
-        ],
+        positions: [bitcoinFund('FBTC', 25000), cash(60000), investments(500000)],
     },
 ]
 

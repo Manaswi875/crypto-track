@@ -5,7 +5,7 @@ export type { TraceStep }
 export const TOOL_LABEL: Record<string, string> = {
     get_market_event: 'Looked up the market move',
     get_price_context: 'Checked longer-term price history',
-    get_my_profile: 'Read your plan',
+    get_my_profile: 'Read your goal',
     get_my_positions: 'Pulled your positions',
     get_my_impact: 'Fetched your computed dollar impact',
     submit_insight: 'Wrote your insight',

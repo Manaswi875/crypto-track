@@ -19,7 +19,7 @@ type InsightData = {
         headline: string | null
         whatHappened: string | null
         whatItMeans: string | null
-        yourPlan: string | null
+        yourGoal: string | null
         questions: string[] | null
         citedFacts: { claim: string; source: string }[] | null
         complianceFlags: { rule: string; match: string }[] | null
@@ -31,7 +31,7 @@ type InsightData = {
         error: string | null
         createdAt: string
         event: { coin: { name: string }; changePct: number; source: string; occurredAt: string; startPrice: number | null; endPrice: number | null }
-        investor: { id: string; name: string; isDemo: boolean; plan: string; dropComfortPct: number; positions: { marketValue: number }[] }
+        investor: { id: string; name: string; isDemo: boolean; goal: string; dropComfortPct: number; positions: { marketValue: number }[] }
     }
     siblings: { id: string; investorId: string; urgency: string | null; investor: { name: string } }[]
 }
@@ -116,7 +116,7 @@ export default function InsightPage({ params }: { params: { id: string } }) {
                         <div className="space-y-5 text-[15px] leading-relaxed">
                             <Section title="What happened">{i.whatHappened}</Section>
                             <Section title={`What it means for ${who === 'You' ? 'you' : who}`}>{i.whatItMeans}</Section>
-                            <Section title={`${who === 'You' ? 'Your' : `${who}'s`} plan`}>{i.yourPlan}</Section>
+                            <Section title={`${who === 'You' ? 'Your' : `${who}'s`} goal: ${i.investor.goal}`}>{i.yourGoal}</Section>
                             {i.questions && i.questions.length > 0 && (
                                 <Section title="Questions worth asking yourself">
                                     <ul className="list-disc space-y-1 pl-5">
@@ -194,7 +194,7 @@ export default function InsightPage({ params }: { params: { id: string } }) {
 function LiveProgress({ steps }: { steps: TraceStep[] }) {
     const done = steps.filter((s): s is Extract<TraceStep, { type: 'tool_call' }> => s.type === 'tool_call')
     const submitted = done.some((s) => s.tool === 'submit_insight')
-    const current = submitted ? 'Saving your insight' : done.length === 0 ? 'Deciding what to look up' : 'Thinking it through against your plan'
+    const current = submitted ? 'Saving your insight' : done.length === 0 ? 'Deciding what to look up' : 'Thinking it through against your goal'
     const elapsed = steps.length ? Math.round(steps[steps.length - 1].atMs / 1000) : 0
 
     return (
