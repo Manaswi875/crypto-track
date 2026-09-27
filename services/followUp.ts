@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import prisma from '@/lib/prisma'
+import { loadInvestor } from '@/lib/investors'
 import { checkClientMessage } from '@/lib/compliance'
 import { eventMoves, portfolioImpact } from '@/lib/impact'
 import { FALLBACK_BETA, MODEL, costUsd, getAnthropic } from '@/lib/anthropic'
@@ -20,15 +21,13 @@ Never:
 
 type InsightWithContext = NonNullable<Awaited<ReturnType<typeof loadInsight>>>
 
-function loadInsight(insightId: string) {
-    return prisma.insight.findUnique({
+async function loadInsight(insightId: string) {
+    const insight = await prisma.insight.findUnique({
         where: { id: insightId },
-        include: {
-            event: { include: { coin: true } },
-            investor: { include: { positions: true } },
-            messages: { orderBy: { createdAt: 'asc' } },
-        },
+        include: { event: { include: { coin: true } }, messages: { orderBy: { createdAt: 'asc' } } },
     })
+    const investor = insight && (await loadInvestor(insight.investorId))
+    return insight && investor ? { ...insight, investor } : null
 }
 
 function contextBlock(i: InsightWithContext) {

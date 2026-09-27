@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import prisma from '@/lib/prisma'
+import { loadInvestor } from '@/lib/investors'
 import { hasAnthropicKey } from '@/lib/anthropic'
 import { eventMoves, portfolioImpact } from '@/lib/impact'
 import { requestInsight } from '@/services/insightAgent'
@@ -14,7 +15,7 @@ export async function POST(req: Request) {
 
     const [event, investor] = await Promise.all([
         prisma.volatilityEvent.findUnique({ where: { id: eventId } }),
-        prisma.investor.findUnique({ where: { id: investorId }, include: { positions: true } }),
+        loadInvestor(investorId),
     ])
     if (!event || !investor) return NextResponse.json({ error: 'Event or investor not found' }, { status: 404 })
     if (portfolioImpact(investor.positions, eventMoves(event)).exposureUsd === 0) {
