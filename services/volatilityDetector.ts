@@ -1,6 +1,5 @@
 import redis from '@/lib/redis'
 import prisma from '@/lib/prisma'
-import { AIAnalyzer } from './aiAnalyzer'
 
 const WINDOW_SIZE = 20 // Number of observations for rolling stats
 const STDEV_MULTIPLIER = 2.5 // k factor for anomaly detection
@@ -12,12 +11,6 @@ const EVENT_COINS = new Set(['bitcoin', 'ethereum', 'solana'])
 const COOLDOWN_SECONDS = 30 * 60
 
 export class VolatilityDetector {
-    private aiAnalyzer: AIAnalyzer
-
-    constructor() {
-        this.aiAnalyzer = new AIAnalyzer()
-    }
-
     async analyze(coinId: string, currentPrice: number) {
         if (!redis) return
 
@@ -52,16 +45,13 @@ export class VolatilityDetector {
             console.warn(`[VOLATILITY] ${coinId} detected anomaly! Change: ${changePct.toFixed(2)}%`)
 
             // 5. Save Event
-            const event = await prisma.volatilityEvent.create({
+            await prisma.volatilityEvent.create({
                 data: {
                     coinId,
                     changePct,
                     severity: Math.abs(changePct) > 5 ? 'high' : 'medium'
                 }
             })
-
-            // 6. Trigger AI Analysis (Async)
-            this.aiAnalyzer.explainMovement(event.id, coinId, currentPrice, changePct)
         }
     }
 }

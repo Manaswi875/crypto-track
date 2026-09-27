@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { useSocket } from '@/context/SocketContext'
-import { Panel, UrgencyBadge } from '@/components/advisor/Badges'
+import { Panel, UrgencyBadge } from '@/components/Badges'
 import { Moves, eventTitle } from '@/components/Moves'
 import { COIN_SYMBOL, date, dateTime, pct, usd } from '@/lib/format'
 

@@ -1,5 +1,3 @@
-import prisma from '@/lib/prisma'
-
 type PositionLike = { symbol: string; name: string; coinId: string | null; marketValue: number }
 type EventLike = { coinId: string; changePct: number; moves?: unknown }
 
@@ -52,48 +50,4 @@ export function portfolioImpact(positions: PositionLike[], moves: CoinMoves): Po
         impactPctOfTotal: totalUsd ? round2((impactUsd / totalUsd) * 100) : 0,
         exposedPositions: exposed,
     }
-}
-
-export type HouseholdImpact = {
-    householdId: string
-    name: string
-    primaryContact: string
-    riskProfile: string
-    lifeStage: string
-    aumUsd: number
-    exposureUsd: number
-    exposurePctOfAum: number
-    impactUsd: number
-    impactPctOfAum: number
-    exposedHoldings: { symbol: string; name: string; marketValue: number }[]
-}
-
-/** The same calculation across an advisor's whole book, ranked by dollar impact. */
-export async function computeEventImpact(eventId: string): Promise<HouseholdImpact[]> {
-    const event = await prisma.volatilityEvent.findUniqueOrThrow({ where: { id: eventId } })
-    const moves = eventMoves(event)
-
-    const households = await prisma.household.findMany({
-        where: { holdings: { some: { coinId: { in: Object.keys(moves) } } } },
-        include: { holdings: true },
-    })
-
-    return households
-        .map((h) => {
-            const p = portfolioImpact(h.holdings, moves)
-            return {
-                householdId: h.id,
-                name: h.name,
-                primaryContact: h.primaryContact,
-                riskProfile: h.riskProfile,
-                lifeStage: h.lifeStage,
-                aumUsd: p.totalUsd,
-                exposureUsd: p.exposureUsd,
-                exposurePctOfAum: p.exposurePctOfTotal,
-                impactUsd: p.impactUsd,
-                impactPctOfAum: p.impactPctOfTotal,
-                exposedHoldings: p.exposedPositions,
-            }
-        })
-        .sort((a, b) => Math.abs(b.impactUsd) - Math.abs(a.impactUsd))
 }

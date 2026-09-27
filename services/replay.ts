@@ -1,5 +1,4 @@
 import prisma from '@/lib/prisma'
-import { audit } from '@/lib/audit'
 import { HISTORY_TTL, coingecko, historyPath } from '@/lib/coingecko'
 
 // Coins people commonly hold; a replayed day applies each one's real move
@@ -75,7 +74,7 @@ export async function listCrashOptions(): Promise<CrashOption[]> {
 }
 
 /** Record a real past crash day as a replay event, applying every coin's actual move that day. */
-export async function createReplayEvent(date: string, actor: string) {
+export async function createReplayEvent(date: string) {
     const series = await loadYear()
     const moves = {} as Record<ReplayCoin, number>
     for (const c of REPLAY_COINS) {
@@ -118,7 +117,6 @@ export async function createReplayEvent(date: string, actor: string) {
             occurredAt,
         },
     })
-    await audit('event_created', actor, 'event', event.id, { source: 'replay', date, moves })
     return { event, created: true }
 }
 
@@ -132,7 +130,7 @@ let ensured: Promise<void> | null = null
 export function ensureCrashEvents() {
     ensured ??= (async () => {
         const options = await listCrashOptions()
-        for (const o of options) await createReplayEvent(o.date, 'system')
+        for (const o of options) await createReplayEvent(o.date)
     })().catch((err) => {
         ensured = null
         console.warn('[REPLAY] Could not load past crashes:', err instanceof Error ? err.message : err)

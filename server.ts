@@ -28,11 +28,7 @@ app.prepare().then(() => {
     })
 
     // AI runs happen in this process, so any still marked in progress were cut off by a restart
-    const interrupted = { status: 'failed', error: 'Interrupted by a server restart. Please retry.' }
-    void Promise.all([
-        prisma.insight.updateMany({ where: { status: 'generating' }, data: interrupted }),
-        prisma.brief.updateMany({ where: { status: { in: ['queued', 'generating'] } }, data: interrupted }),
-    ])
+    void prisma.insight.updateMany({ where: { status: 'generating' }, data: { status: 'failed', error: 'Interrupted by a server restart. Please retry.' } })
 
     // Start Services
     const priceTracker = new PriceTracker()
@@ -57,21 +53,13 @@ app.prepare().then(() => {
     // Proxy Redis events to WebSockets
     if (redis) {
         const subClient = redis.duplicate()
-        subClient.subscribe('price-updates', 'notifications', 'agent-progress')
+        subClient.subscribe('price-updates')
 
         subClient.on('message', (channel, message) => {
             const data = JSON.parse(message)
 
             if (channel === 'price-updates') {
                 io.to(`coin:${data.coinId}`).to('all-prices').emit('price-update', data)
-            } else if (channel === 'agent-progress') {
-                io.emit('brief-update', data)
-            } else if (channel === 'notifications') {
-                if (data.userId === 'ALL') {
-                    io.emit('notification', data)
-                } else {
-                    io.to(`user:${data.userId}`).emit('notification', data)
-                }
             }
         })
     }
