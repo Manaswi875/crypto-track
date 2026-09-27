@@ -337,8 +337,8 @@ function MoneyPanel({ title, positions, total, investorId }: { title: string; po
 
             {crypto && (
                 <div className="mt-5">
-                    <Link href={`/sell-check?investor=${investorId}`} className="mb-4 block rounded-md border px-3 py-2 text-center text-sm font-medium hover:bg-secondary">
-                        Before you sell: today&apos;s market and your profit or loss →
+                    <Link href={`/markets?investor=${investorId}#yours`} className="mb-4 block rounded-md border px-3 py-2 text-center text-sm font-medium hover:bg-secondary">
+                        How the market looks for your crypto, and your profit or loss →
                     </Link>
                     <div className="mb-2 flex justify-between text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         <span>Crypto</span>
