@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { Panel, UrgencyBadge } from '@/components/advisor/Badges'
-import { Trace, TraceStep } from '@/components/Trace'
+import { TOOL_LABEL, Trace, TraceStep } from '@/components/Trace'
 import { date, dateTime, pct, usd } from '@/lib/format'
 
 type InsightData = {
@@ -37,11 +37,8 @@ type InsightData = {
     siblings: { id: string; investorId: string; urgency: string | null; investor: { name: string } }[]
 }
 
-const WORKING_STEPS = ['Looking up the move', 'Reading your plan', 'Checking your positions', 'Putting it in context', 'Writing it up']
-
 export default function InsightPage({ params }: { params: { id: string } }) {
     const [data, setData] = useState<InsightData | null>(null)
-    const [tick, setTick] = useState(0)
     const [regenerating, setRegenerating] = useState(false)
 
     const load = useCallback(async () => {
@@ -57,10 +54,7 @@ export default function InsightPage({ params }: { params: { id: string } }) {
     const generating = data?.insight.status === 'generating'
     useEffect(() => {
         if (!generating) return
-        const t = setInterval(() => {
-            setTick((n) => n + 1)
-            load()
-        }, 2000)
+        const t = setInterval(load, 1500)
         return () => clearInterval(t)
     }, [generating, load])
 
@@ -104,15 +98,7 @@ export default function InsightPage({ params }: { params: { id: string } }) {
                 <Figure label="Crypto exposure" value={usd(i.exposureUsd)} hint={`of ${usd(total)}`} />
             </div>
 
-            {i.status === 'generating' && (
-                <Panel>
-                    <div className="flex items-center gap-3">
-                        <span className="h-3 w-3 animate-ping rounded-full bg-primary" />
-                        <span className="text-sm">{WORKING_STEPS[Math.min(tick, WORKING_STEPS.length - 1)]}…</span>
-                    </div>
-                    <p className="mt-2 text-xs text-muted-foreground">The AI is gathering your data with its tools. This usually takes 20–30 seconds.</p>
-                </Panel>
-            )}
+            {i.status === 'generating' && <LiveProgress steps={i.trace ?? []} />}
 
             {i.status === 'failed' && (
                 <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
@@ -202,6 +188,37 @@ export default function InsightPage({ params }: { params: { id: string } }) {
                 </>
             )}
         </div>
+    )
+}
+
+/** Real progress: each step the agent has actually finished, then what it's doing now. */
+function LiveProgress({ steps }: { steps: TraceStep[] }) {
+    const done = steps.filter((s): s is Extract<TraceStep, { type: 'tool_call' }> => s.type === 'tool_call')
+    const submitted = done.some((s) => s.tool === 'submit_insight')
+    const current = submitted ? 'Saving your insight' : done.length === 0 ? 'Deciding what to look up' : 'Thinking it through against your plan'
+    const elapsed = steps.length ? Math.round(steps[steps.length - 1].atMs / 1000) : 0
+
+    return (
+        <Panel>
+            <ol className="space-y-2 text-sm">
+                {done
+                    .filter((s) => s.tool !== 'submit_insight')
+                    .map((s, n) => (
+                        <li key={n} className="flex items-center gap-2">
+                            <span className="text-emerald-400">✓</span>
+                            {TOOL_LABEL[s.tool] ?? s.tool}
+                            <span className="text-xs text-muted-foreground">{(s.atMs / 1000).toFixed(1)}s</span>
+                        </li>
+                    ))}
+                <li className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 animate-ping rounded-full bg-primary" />
+                    <span>{current}…</span>
+                </li>
+            </ol>
+            <p className="mt-3 text-xs text-muted-foreground">
+                Claude is working through your data with its tools{elapsed ? ` (${elapsed}s so far)` : ''}. This usually takes 20–30 seconds.
+            </p>
+        </Panel>
     )
 }
 

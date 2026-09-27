@@ -122,7 +122,7 @@ export async function runBriefAgent(eventId: string, householdId: string, impact
             inputSchema: SubmitBriefInput,
             run: async (input) => {
                 submitted = input
-                agent.trace.push({ type: 'tool_call', tool: 'submit_brief', output: { priority: input.priority }, ms: 0, atMs: Date.now() - agent.started })
+                agent.record({ type: 'tool_call', tool: 'submit_brief', output: { priority: input.priority }, ms: 0, atMs: Date.now() - agent.started })
                 return 'Brief recorded.'
             },
         }),

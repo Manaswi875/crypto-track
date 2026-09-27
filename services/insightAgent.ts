@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { checkClientMessage } from '@/lib/compliance'
 import { portfolioImpact } from '@/lib/impact'
-import { AgentRun } from '@/services/agentCore'
+import { AgentRun, TraceStep } from '@/services/agentCore'
 
 const SubmitInsightInput = z.object({
     urgency: z
@@ -55,7 +55,7 @@ Rules:
 When you are done, call submit_insight exactly once.`
 
 /** Run the insight agent for one investor. Does not write to the database. */
-export async function runInsightAgent(eventId: string, investorId: string) {
+export async function runInsightAgent(eventId: string, investorId: string, onStep?: (trace: TraceStep[]) => void) {
     const [event, investor] = await Promise.all([
         prisma.volatilityEvent.findUniqueOrThrow({ where: { id: eventId }, include: { coin: true } }),
         prisma.investor.findUniqueOrThrow({ where: { id: investorId }, include: { positions: true } }),
@@ -63,7 +63,7 @@ export async function runInsightAgent(eventId: string, investorId: string) {
     const impact = portfolioImpact(investor.positions, event.coinId, event.changePct)
     if (impact.exposureUsd === 0) throw new Error(`${investor.name} holds no ${event.coin.name}`)
 
-    const agent = new AgentRun()
+    const agent = new AgentRun(onStep)
     let submitted: SubmittedInsight | null = null
 
     const tools = [
@@ -104,7 +104,7 @@ export async function runInsightAgent(eventId: string, investorId: string) {
             inputSchema: SubmitInsightInput,
             run: async (input) => {
                 submitted = input
-                agent.trace.push({ type: 'tool_call', tool: 'submit_insight', output: { urgency: input.urgency }, ms: 0, atMs: Date.now() - agent.started })
+                agent.record({ type: 'tool_call', tool: 'submit_insight', output: { urgency: input.urgency }, ms: 0, atMs: Date.now() - agent.started })
                 return 'Insight recorded.'
             },
         }),
@@ -147,7 +147,7 @@ export async function requestInsight(eventId: string, investorId: string, opts: 
 
     const row = await prisma.insight.upsert({
         where: { eventId_investorId: { eventId, investorId } },
-        update: { status: 'generating', error: null, ...numbers },
+        update: { status: 'generating', error: null, trace: Prisma.DbNull, ...numbers },
         create: { eventId, investorId, status: 'generating', ...numbers },
     })
 
@@ -156,8 +156,17 @@ export async function requestInsight(eventId: string, investorId: string, opts: 
 }
 
 async function generate(insightId: string, eventId: string, investorId: string) {
+    // Save each step as it happens so the page can show live progress.
+    // Writes are chained so they land in order and finish before the final update.
+    let progress: Promise<unknown> = Promise.resolve()
+    const onStep = (trace: TraceStep[]) => {
+        const snapshot = [...trace] as unknown as Prisma.InputJsonValue
+        progress = progress.then(() => prisma.insight.update({ where: { id: insightId }, data: { trace: snapshot } })).catch(() => {})
+    }
+
     try {
-        const r = await runInsightAgent(eventId, investorId)
+        const r = await runInsightAgent(eventId, investorId, onStep)
+        await progress
         await prisma.insight.update({
             where: { id: insightId },
             data: {
@@ -181,6 +190,7 @@ async function generate(insightId: string, eventId: string, investorId: string) 
     } catch (err) {
         const message = err instanceof Anthropic.APIError ? `API error ${err.status}: ${err.message}` : err instanceof Error ? err.message : String(err)
         console.error(`[AGENT] Insight ${insightId} failed:`, message)
+        await progress
         await prisma.insight.update({ where: { id: insightId }, data: { status: 'failed', error: message } })
     }
 }
