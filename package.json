@@ -9,7 +9,8 @@
     "build:server": "tsc -p tsconfig.server.json && tsc-alias -p tsconfig.server.json",
     "start": "next start",
     "start:server": "NODE_ENV=production node -r dotenv/config dist/server.js",
-    "lint": "next lint"
+    "lint": "next lint",
+    "eval": "TS_NODE_PROJECT=tsconfig.server.json node -r dotenv/config -r ts-node/register -r tsconfig-paths/register scripts/eval-insights.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
