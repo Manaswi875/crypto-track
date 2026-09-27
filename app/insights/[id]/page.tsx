@@ -36,7 +36,6 @@ type InsightData = {
         investor: { id: string; name: string; isDemo: boolean; goal: string; dropComfortPct: number; positions: { marketValue: number }[] }
         messages: ThreadMessage[]
     }
-    siblings: { id: string; investorId: string; urgency: string | null; investor: { name: string } }[]
 }
 
 export default function InsightPage({ params }: { params: { id: string } }) {
@@ -74,7 +73,7 @@ export default function InsightPage({ params }: { params: { id: string } }) {
 
     if (!data) return <div className="text-muted-foreground">Loading…</div>
 
-    const { insight: i, siblings } = data
+    const { insight: i } = data
     const who = i.investor.isDemo ? i.investor.name : 'You'
     const total = i.investor.positions.reduce((s, p) => s + p.marketValue, 0)
     const flags = i.complianceFlags ?? []
@@ -83,7 +82,7 @@ export default function InsightPage({ params }: { params: { id: string } }) {
         <div className="mx-auto max-w-3xl space-y-6">
             <div>
                 <Link href={`/?investor=${i.investor.id}`} className="text-sm text-muted-foreground hover:text-foreground">
-                    ← {i.investor.isDemo ? `${i.investor.name}'s portfolio` : 'Your portfolio'}
+                    ← {i.investor.isDemo ? `${i.investor.name}'s portfolio` : 'Today'}
                 </Link>
                 <p className="mt-3 text-sm text-muted-foreground">
                     <span className="font-medium text-foreground">{eventTitle(i.event)}</span> · <Moves event={i.event} /> ·{' '}
@@ -94,7 +93,7 @@ export default function InsightPage({ params }: { params: { id: string } }) {
             {/* Deterministic numbers, shown before and independent of the AI */}
             <div className="grid grid-cols-3 gap-3">
                 <Figure label={`${who === 'You' ? 'Your' : `${who}'s`} impact`} value={usd(i.impactUsd)} tone="red" />
-                <Figure label="Of total portfolio" value={pct(i.impactPctOfTotal)} tone="red" />
+                <Figure label="Of everything you have" value={pct(i.impactPctOfTotal)} tone="red" />
                 <Figure label="Crypto exposure" value={usd(i.exposureUsd)} hint={`of ${usd(total)}`} />
             </div>
 
@@ -140,50 +139,44 @@ export default function InsightPage({ params }: { params: { id: string } }) {
 
                     <FollowUp insightId={i.id} selectableId="insight-body" initial={i.messages} />
 
-                    {siblings.length > 1 && (
-                        <div className="flex flex-wrap items-center gap-2 text-sm">
-                            <span className="text-muted-foreground">Same move, other investors:</span>
-                            {siblings
-                                .filter((s) => s.id !== i.id)
-                                .map((s) => (
-                                    <Link key={s.id} href={`/insights/${s.id}`} className="rounded-md border px-2.5 py-1 hover:bg-secondary">
-                                        {s.investor.name}
-                                    </Link>
-                                ))}
-                        </div>
-                    )}
-
-                    {i.citedFacts && i.citedFacts.length > 0 && (
-                        <Panel title="Where each fact came from">
-                            <ul className="space-y-2 text-sm">
-                                {i.citedFacts.map((f, n) => (
-                                    <li key={n} className="flex gap-3">
-                                        <code className="shrink-0 rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground">{f.source}</code>
-                                        <span>{f.claim}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                        </Panel>
-                    )}
-
-                    <Panel
-                        title="How the AI got here"
-                        action={
-                            <span className="text-xs tabular-nums text-muted-foreground">
-                                {i.model} · {((i.latencyMs ?? 0) / 1000).toFixed(1)}s
-                            </span>
-                        }
-                    >
-                        <Trace steps={i.trace ?? []} />
-                        <div className="mt-4 flex items-center justify-between border-t pt-3 text-xs text-muted-foreground">
+                    <details className="group rounded-xl border bg-card/50">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-3 text-sm font-semibold">
                             <span>
-                                {i.inputTokens?.toLocaleString()} tokens in / {i.outputTokens?.toLocaleString()} out · written {dateTime(i.createdAt)}
+                                How this was made <span className="font-normal text-muted-foreground group-open:hidden">▸</span>
+                                <span className="hidden font-normal text-muted-foreground group-open:inline">▾</span>
                             </span>
-                            <button onClick={regenerate} disabled={regenerating} className="hover:text-foreground disabled:opacity-50">
-                                {regenerating ? 'Starting…' : 'Regenerate'}
-                            </button>
+                            <span className="text-xs font-normal tabular-nums text-muted-foreground">
+                                {i.trace?.filter((t) => t.type === 'tool_call').length ?? 0} data lookups · {i.citedFacts?.length ?? 0} cited facts · {((i.latencyMs ?? 0) / 1000).toFixed(1)}s
+                            </span>
+                        </summary>
+                        <div className="space-y-6 border-t p-5">
+                            <div>
+                                <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Steps the AI took</h4>
+                                <Trace steps={i.trace ?? []} />
+                            </div>
+                            {i.citedFacts && i.citedFacts.length > 0 && (
+                                <div>
+                                    <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Where each fact came from</h4>
+                                    <ul className="space-y-2 text-sm">
+                                        {i.citedFacts.map((f, n) => (
+                                            <li key={n} className="flex gap-3">
+                                                <code className="shrink-0 rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground">{f.source}</code>
+                                                <span>{f.claim}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                            <div className="flex items-center justify-between border-t pt-3 text-xs text-muted-foreground">
+                                <span>
+                                    {i.model} · {i.inputTokens?.toLocaleString()} tokens in / {i.outputTokens?.toLocaleString()} out · written {dateTime(i.createdAt)}
+                                </span>
+                                <button onClick={regenerate} disabled={regenerating} className="hover:text-foreground disabled:opacity-50">
+                                    {regenerating ? 'Starting…' : 'Regenerate'}
+                                </button>
+                            </div>
                         </div>
-                    </Panel>
+                    </details>
                 </>
             )}
         </div>
