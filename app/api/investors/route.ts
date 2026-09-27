@@ -4,7 +4,7 @@ import prisma from '@/lib/prisma'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-    const investors = await prisma.investor.findMany({ include: { positions: true }, orderBy: { createdAt: 'asc' } })
+    const investors = await prisma.investor.findMany({ include: { positions: true }, orderBy: [{ isDemo: 'asc' }, { createdAt: 'asc' }] })
     return NextResponse.json(
         investors.map(({ positions, ...i }) => {
             const totalUsd = positions.reduce((s, p) => s + p.marketValue, 0)

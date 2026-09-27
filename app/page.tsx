@@ -52,7 +52,7 @@ export default function MyPortfolio() {
     useEffect(() => {
         fetch('/api/investors').then(async (r) => r.ok && setInvestors(await r.json()))
         const fromUrl = new URLSearchParams(window.location.search).get('investor')
-        setSelected(fromUrl ?? 'maya')
+        setSelected(fromUrl ?? 'you')
     }, [])
 
     const load = useCallback(async () => {
@@ -132,24 +132,55 @@ export default function MyPortfolio() {
                 ))}
             </div>
 
-            {/* Investor switcher */}
-            <div className="flex flex-wrap gap-2">
-                {investors.map((i) => (
-                    <button
-                        key={i.id}
-                        onClick={() => setSelected(i.id)}
-                        className={`rounded-lg border px-4 py-2 text-left transition-colors ${selected === i.id ? 'border-primary bg-secondary' : 'hover:bg-secondary/50'}`}
-                    >
-                        <div className="text-sm font-semibold">{i.name}</div>
-                        <div className="text-xs text-muted-foreground">{i.tagline}</div>
-                    </button>
-                ))}
+            {/* Your portfolio first; example investors show the same move through other eyes */}
+            <div className="flex flex-wrap items-center gap-2">
+                {investors
+                    .filter((i) => !i.isDemo)
+                    .map((i) => (
+                        <button
+                            key={i.id}
+                            onClick={() => setSelected(i.id)}
+                            className={`rounded-lg border px-4 py-2 text-left transition-colors ${selected === i.id ? 'border-primary bg-secondary' : 'hover:bg-secondary/50'}`}
+                        >
+                            <div className="text-sm font-semibold">Your portfolio</div>
+                            <div className="text-xs text-muted-foreground">{usd(i.totalUsd, { compact: true })} · {usd(i.cryptoUsd, { compact: true })} crypto</div>
+                        </button>
+                    ))}
+                {investors.some((i) => i.isDemo) && (
+                    <>
+                        <span className="mx-2 hidden h-8 w-px bg-border sm:block" />
+                        <span className="text-xs uppercase tracking-wider text-muted-foreground">Example investors</span>
+                        {investors
+                            .filter((i) => i.isDemo)
+                            .map((i) => (
+                                <button
+                                    key={i.id}
+                                    onClick={() => setSelected(i.id)}
+                                    className={`rounded-lg border border-dashed px-3 py-1.5 text-left transition-colors ${selected === i.id ? 'border-primary bg-secondary' : 'hover:bg-secondary/50'}`}
+                                >
+                                    <div className="text-sm font-medium">{i.name}</div>
+                                    <div className="text-xs text-muted-foreground">{i.tagline}</div>
+                                </button>
+                            ))}
+                    </>
+                )}
             </div>
 
             {!inv ? (
                 <div className="text-muted-foreground">Loading portfolio…</div>
             ) : (
                 <>
+                    {inv.isDemo && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed px-4 py-2 text-sm">
+                            <span className="text-muted-foreground">
+                                You&apos;re viewing an example investor: <span className="font-medium text-foreground">{inv.name}{inv.age ? `, ${inv.age}` : ''}</span> · {inv.tagline}
+                            </span>
+                            <button onClick={() => setSelected('you')} className="font-medium text-primary hover:underline">
+                                ← Back to your portfolio
+                            </button>
+                        </div>
+                    )}
+
                     <div>
                         <h2 className="text-3xl font-bold tracking-tight">{inv.isDemo ? `${inv.name}'s portfolio` : 'Your portfolio'}</h2>
                         <p className="text-muted-foreground">

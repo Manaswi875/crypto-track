@@ -208,8 +208,24 @@ const INVESTORS: {
     positions: PositionSeed[]
 }[] = [
     {
-        id: 'maya',
-        name: 'Maya',
+        id: 'you',
+        name: 'You',
+        tagline: 'Your own portfolio',
+        age: null,
+        riskComfort: 'medium',
+        timeHorizon: '5+ years',
+        dropComfortPct: 30,
+        plan: 'Long-term investor. Crypto is a small part of my savings, and I want to understand big moves without being told what to do.',
+        isDemo: false,
+        positions: [
+            { symbol: 'VTI', name: 'Vanguard Total Stock Market ETF', assetClass: 'equity', marketValue: 30000 },
+            { symbol: 'IBIT', name: 'iShares Bitcoin Trust ETF', assetClass: 'crypto_etf', coinId: 'bitcoin', marketValue: 10000 },
+            { symbol: 'SWVXX', name: 'Schwab Value Advantage Money Fund', assetClass: 'cash', marketValue: 10000 },
+        ],
+    },
+    {
+        id: 'arjun',
+        name: 'Arjun',
         tagline: 'Long-term crypto believer',
         age: 29,
         riskComfort: 'high',
@@ -226,8 +242,8 @@ const INVESTORS: {
         ],
     },
     {
-        id: 'daniel',
-        name: 'Daniel',
+        id: 'sofia',
+        name: 'Sofia',
         tagline: 'Saving for a house',
         age: 36,
         riskComfort: 'medium',
@@ -243,8 +259,8 @@ const INVESTORS: {
         ],
     },
     {
-        id: 'linda',
-        name: 'Linda',
+        id: 'robert',
+        name: 'Robert',
         tagline: 'Retiring next year',
         age: 63,
         riskComfort: 'low',
@@ -258,22 +274,6 @@ const INVESTORS: {
             { symbol: 'VTIP', name: 'Vanguard Short-Term Inflation-Protected Securities ETF', assetClass: 'fixed_income', marketValue: 90000 },
             { symbol: 'SWVXX', name: 'Schwab Value Advantage Money Fund', assetClass: 'cash', marketValue: 60000 },
             { symbol: 'FBTC', name: 'Fidelity Wise Origin Bitcoin Fund', assetClass: 'crypto_etf', coinId: 'bitcoin', marketValue: 25000 },
-        ],
-    },
-    {
-        id: 'you',
-        name: 'You',
-        tagline: 'Your own portfolio',
-        age: null,
-        riskComfort: 'medium',
-        timeHorizon: '5+ years',
-        dropComfortPct: 30,
-        plan: 'Long-term investor. Crypto is a small part of my savings, and I want to understand big moves without being told what to do.',
-        isDemo: false,
-        positions: [
-            { symbol: 'VTI', name: 'Vanguard Total Stock Market ETF', assetClass: 'equity', marketValue: 30000 },
-            { symbol: 'IBIT', name: 'iShares Bitcoin Trust ETF', assetClass: 'crypto_etf', coinId: 'bitcoin', marketValue: 10000 },
-            { symbol: 'SWVXX', name: 'Schwab Value Advantage Money Fund', assetClass: 'cash', marketValue: 10000 },
         ],
     },
 ]
