@@ -3,21 +3,13 @@ import prisma from '@/lib/prisma'
 import { loadInvestor } from '@/lib/investors'
 import { checkClientMessage } from '@/lib/compliance'
 import { eventMoves, portfolioImpact } from '@/lib/impact'
-import { FALLBACK_BETA, MODEL, costUsd, getAnthropic } from '@/lib/anthropic'
+import { ANSWER_RULES, streamAnswer } from '@/services/streamAnswer'
 
 const MAX_HISTORY = 10
 
-const SYSTEM_PROMPT = `You answer an individual investor's follow-up questions about a crypto sell-off and what it means for them. The context below has everything known about the move, their goal, their holdings, and the insight they were shown.
+const SYSTEM_PROMPT = `You answer an individual investor's follow-up questions about a crypto sell-off and what it means for them. The context below has everything known about the move, their goal, their holdings, and the insight they were shown. If they quote part of the insight, answer about that part specifically.
 
-How to answer:
-- Plain English, calm, short: 2-4 sentences unless they ask for more. No headings.
-- If they quote part of the insight, answer about that part specifically.
-- You can explain general concepts (what a crypto fund is, what a sell-off is, why coins move together).
-- Use numbers only from the context, exactly as given. If something isn't in the context, say you don't have that information.
-
-Never:
-- Tell them to buy, sell, hold, rebalance, or "buy the dip", even if they ask directly. You can lay out what to weigh and suggest a licensed financial adviser for the decision.
-- Predict prices or promise outcomes.`
+${ANSWER_RULES}`
 
 type InsightWithContext = NonNullable<Awaited<ReturnType<typeof loadInsight>>>
 
@@ -80,37 +72,11 @@ export async function* askFollowUp(insightId: string, question: string, quote?: 
         content: m.role === 'user' && m.quote ? `About this part: "${m.quote}"\n\n${m.content}` : m.content,
     }))
 
-    // Stable context first so repeat questions reuse the cached prefix
-    const stream = getAnthropic().beta.messages.stream({
-        model: MODEL,
-        max_tokens: 4000,
-        betas: [FALLBACK_BETA],
-        fallbacks: 'default',
-        thinking: { type: 'adaptive' },
-        output_config: { effort: 'medium' },
-        system: [{ type: 'text', text: `${SYSTEM_PROMPT}\n\n<context>\n${contextBlock(insight)}\n</context>`, cache_control: { type: 'ephemeral' } }],
-        messages: [...history, { role: 'user', content: quote ? `About this part: "${quote}"\n\n${question}` : question }],
+    const userContent = quote ? `About this part: "${quote}"\n\n${question}` : question
+    yield* streamAnswer(`${SYSTEM_PROMPT}\n\n<context>\n${contextBlock(insight)}\n</context>`, [...history, { role: 'user', content: userContent }], async (answer, cost) => {
+        await prisma.$transaction([
+            prisma.insightMessage.create({ data: { insightId, role: 'user', content: question, quote: quote || null } }),
+            prisma.insightMessage.create({ data: { insightId, role: 'assistant', content: answer, complianceFlags: checkClientMessage(answer), costUsd: cost } }),
+        ])
     })
-
-    let answer = ''
-    for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-            answer += event.delta.text
-            yield event.delta.text
-        }
-    }
-    const final = await stream.finalMessage()
-    if (final.stop_reason === 'refusal') {
-        const note = "I can't help with that one. I can explain what this move means for your money, or general crypto concepts."
-        answer = note
-        yield note
-    }
-
-    const flags = checkClientMessage(answer)
-    await prisma.$transaction([
-        prisma.insightMessage.create({ data: { insightId, role: 'user', content: question, quote: quote || null } }),
-        prisma.insightMessage.create({
-            data: { insightId, role: 'assistant', content: answer.trim(), complianceFlags: flags, costUsd: costUsd(final.usage) },
-        }),
-    ])
 }

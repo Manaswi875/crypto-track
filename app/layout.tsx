@@ -1,4 +1,5 @@
 import { SocketProvider } from '@/context/SocketContext'
+import { AskDrawer } from '@/components/AskDrawer'
 import './globals.css'
 import { Inter } from 'next/font/google'
 
@@ -42,6 +43,7 @@ export default function RootLayout({
             <main className="flex-1 container mx-auto px-4 py-8">
               {children}
             </main>
+            <AskDrawer />
           </div>
         </SocketProvider>
       </body>
