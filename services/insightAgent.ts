@@ -6,6 +6,7 @@ import prisma from '@/lib/prisma'
 import { checkClientMessage } from '@/lib/compliance'
 import { eventMoves, portfolioImpact } from '@/lib/impact'
 import { AgentRun, TraceStep } from '@/services/agentCore'
+import { loadInvestor } from '@/lib/investors'
 
 const SubmitInsightInput = z.object({
     urgency: z
@@ -60,7 +61,7 @@ When you are done, call submit_insight exactly once.`
 export async function runInsightAgent(eventId: string, investorId: string, onStep?: (trace: TraceStep[]) => void) {
     const [event, investor] = await Promise.all([
         prisma.volatilityEvent.findUniqueOrThrow({ where: { id: eventId }, include: { coin: true } }),
-        prisma.investor.findUniqueOrThrow({ where: { id: investorId }, include: { positions: true } }),
+        loadInvestor(investorId).then((i) => i ?? Promise.reject(new Error('Investor not found'))),
     ])
     const moves = eventMoves(event)
     const impact = portfolioImpact(investor.positions, moves)
@@ -145,7 +146,7 @@ export async function requestInsight(eventId: string, investorId: string, opts: 
 
     const [event, investor] = await Promise.all([
         prisma.volatilityEvent.findUniqueOrThrow({ where: { id: eventId } }),
-        prisma.investor.findUniqueOrThrow({ where: { id: investorId }, include: { positions: true } }),
+        loadInvestor(investorId).then((i) => i ?? Promise.reject(new Error('Investor not found'))),
     ])
     const impact = portfolioImpact(investor.positions, eventMoves(event))
     const numbers = { exposureUsd: impact.exposureUsd, impactUsd: impact.impactUsd, impactPctOfTotal: impact.impactPctOfTotal }

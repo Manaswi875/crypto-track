@@ -79,6 +79,7 @@ model Position {
   coinId      String? // underlying crypto exposure
   marketValue Float
   investedUsd Float? // what they put in, for gain/loss if they sold today
+  units       Float? // coin units the holding represents, so its value follows the live price
 
   @@index([investorId])
 }

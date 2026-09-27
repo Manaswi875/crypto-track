@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { loadInvestor } from '@/lib/investors'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-    const investors = await prisma.investor.findMany({ include: { positions: true }, orderBy: [{ isDemo: 'asc' }, { createdAt: 'asc' }] })
+    const ids = await prisma.investor.findMany({ select: { id: true }, orderBy: [{ isDemo: 'asc' }, { createdAt: 'asc' }] })
+    const investors = (await Promise.all(ids.map((i) => loadInvestor(i.id)))).filter((i) => i != null)
     return NextResponse.json(
         investors.map(({ positions, ...i }) => {
             const totalUsd = positions.reduce((s, p) => s + p.marketValue, 0)

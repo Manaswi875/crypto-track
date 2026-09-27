@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import prisma from '@/lib/prisma'
+import { loadInvestor } from '@/lib/investors'
 import { marketToday } from '@/lib/marketStats'
 
 export const dynamic = 'force-dynamic'
 
 /** For each crypto holding: today's market, what selling today would return, and the overall profit or loss. */
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
-    const investor = await prisma.investor.findUnique({ where: { id: params.id }, include: { positions: { orderBy: { marketValue: 'desc' } } } })
+    const investor = await loadInvestor(params.id)
     if (!investor) return NextResponse.json({ error: 'Investor not found' }, { status: 404 })
 
     const crypto = investor.positions.filter((p): p is typeof p & { coinId: string } => p.coinId != null)
