@@ -1,123 +1,303 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useState } from 'react'
 import { useSocket } from '@/context/SocketContext'
-import { PriceCard } from '@/components/dashboard/PriceCard'
-import { VolatilityFeed } from '@/components/dashboard/VolatilityFeed'
-import { WhaleFeed } from '@/components/dashboard/WhaleFeed'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Panel, SourceBadge, UrgencyBadge } from '@/components/advisor/Badges'
+import { COIN_SYMBOL, date, dateTime, pct, usd } from '@/lib/format'
 
-export default function Dashboard() {
-  const { socket, isConnected } = useSocket()
-  const [prices, setPrices] = useState<Record<string, any>>({})
-  const [volatilityEvents, setVolatilityEvents] = useState<any[]>([])
-  const [whaleEvents, setWhaleEvents] = useState<any[]>([])
-
-  useEffect(() => {
-    if (!socket) return
-
-    socket.emit('subscribe', 'all-prices')
-
-    socket.on('price-update', (data) => {
-      setPrices((prev) => ({
-        ...prev,
-        [data.coinId]: data
-      }))
-    })
-
-    socket.on('whale-event', (data) => {
-      setWhaleEvents((prev) => [data, ...prev].slice(0, 10))
-    })
-
-    socket.on('notification', (data) => {
-      // In a real app, you'd show a toast or browser notification here
-      if (data.data?.type === 'volatility') {
-        setVolatilityEvents((prev) => [data.data, ...prev].slice(0, 10))
-      }
-    })
-
-    return () => {
-      socket.off('price-update')
-      socket.off('whale-event')
-      socket.off('notification')
+type InvestorSummary = { id: string; name: string; tagline: string; isDemo: boolean; totalUsd: number; cryptoUsd: number }
+type Position = { id: string; symbol: string; name: string; assetClass: string; coinId: string | null; marketValue: number }
+type EventRow = {
+    id: string
+    coinId: string
+    coin: { name: string }
+    changePct: number
+    source: string
+    occurredAt: string
+    impact: { exposureUsd: number; impactUsd: number; impactPctOfTotal: number }
+    insight: { id: string; status: string; urgency: string | null; headline: string | null } | null
+}
+type InvestorData = {
+    investor: {
+        id: string
+        name: string
+        tagline: string
+        age: number | null
+        riskComfort: string
+        timeHorizon: string
+        plan: string
+        dropComfortPct: number
+        isDemo: boolean
+        positions: Position[]
     }
-  }, [socket])
+    aiEnabled: boolean
+    events: EventRow[]
+}
 
-  const initialCoins = ['bitcoin', 'ethereum', 'solana', 'cardano', 'ripple']
+const REPLAY_COINS = ['bitcoin', 'ethereum', 'solana'] as const
+const LIVE_COINS = ['bitcoin', 'ethereum', 'solana']
 
-  return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Market Overview</h2>
-          <p className="text-muted-foreground">Real-time monitoring across 5 major assets.</p>
-        </div>
-        <div className="flex items-center gap-2 text-xs font-medium">
-          <span className="text-muted-foreground uppercase tracking-widest">Status:</span>
-          <span className={isConnected ? "text-green-500" : "text-red-500"}>
-            {isConnected ? "CONNECTED" : "DISCONNECTED"}
-          </span>
-        </div>
-      </div>
+export default function MyPortfolio() {
+    const router = useRouter()
+    const { socket } = useSocket()
+    const [investors, setInvestors] = useState<InvestorSummary[]>([])
+    const [selected, setSelected] = useState<string | null>(null)
+    const [data, setData] = useState<InvestorData | null>(null)
+    const [prices, setPrices] = useState<Record<string, { price: number; change24h: number }>>({})
+    const [busy, setBusy] = useState<string | null>(null)
+    const [error, setError] = useState<string | null>(null)
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        {initialCoins.map((coinId) => {
-          const data = prices[coinId] || {
-            coinId,
-            symbol: coinId === 'bitcoin' ? 'btc' : coinId === 'ethereum' ? 'eth' : coinId.slice(0, 3),
-            price: 0,
-            change24h: 0,
-            volume24h: 0
-          }
-          return <PriceCard key={coinId} {...data} />
-        })}
-      </div>
+    useEffect(() => {
+        fetch('/api/investors').then(async (r) => r.ok && setInvestors(await r.json()))
+        const fromUrl = new URLSearchParams(window.location.search).get('investor')
+        setSelected(fromUrl ?? 'maya')
+    }, [])
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          <Card className="bg-card/50 border-none shadow-xl min-h-[400px]">
-            <Tabs defaultValue="chart" className="w-full">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <TabsList className="bg-background/50">
-                  <TabsTrigger value="chart">Price Chart</TabsTrigger>
-                  <TabsTrigger value="depth">Market Depth</TabsTrigger>
-                </TabsList>
-                <div className="flex gap-2">
-                  {['1H', '24H', '7D', '1M'].map((t) => (
-                    <button key={t} className="text-[10px] px-2 py-1 rounded hover:bg-primary/10 transition-colors uppercase font-bold text-muted-foreground hover:text-primary">
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <TabsContent value="chart" className="mt-0">
-                  <div className="h-[300px] flex items-center justify-center text-muted-foreground border-2 border-dashed border-muted/20 rounded-xl">
-                    [Chart Component Integration: Recharts]
-                  </div>
-                </TabsContent>
-              </CardContent>
-            </Tabs>
-          </Card>
-        </div>
+    const load = useCallback(async () => {
+        if (!selected) return
+        const res = await fetch(`/api/investors/${selected}`)
+        if (res.ok) setData(await res.json())
+    }, [selected])
 
+    useEffect(() => {
+        if (!selected) return
+        window.history.replaceState(null, '', `/?investor=${selected}`)
+        setData(null)
+        load()
+    }, [selected, load])
+
+    useEffect(() => {
+        if (!socket) return
+        socket.emit('subscribe', 'all-prices')
+        const onPrice = (p: { coinId: string; price: number; change24h: number }) => setPrices((prev) => ({ ...prev, [p.coinId]: p }))
+        socket.on('price-update', onPrice)
+        return () => {
+            socket.off('price-update', onPrice)
+        }
+    }, [socket])
+
+    async function replay(coinId: string) {
+        setBusy(`replay:${coinId}`)
+        setError(null)
+        const res = await fetch('/api/events/replay', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ coinId }),
+        })
+        setBusy(null)
+        if (!res.ok) return setError((await res.json()).error ?? 'Replay failed')
+        load()
+    }
+
+    async function explain(eventId: string) {
+        if (!selected) return
+        setBusy(`explain:${eventId}`)
+        setError(null)
+        const res = await fetch('/api/insights', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ eventId, investorId: selected }),
+        })
+        setBusy(null)
+        if (!res.ok) return setError((await res.json()).error ?? 'Could not create insight')
+        const insight = await res.json()
+        router.push(`/insights/${insight.id}`)
+    }
+
+    const inv = data?.investor
+    const total = inv?.positions.reduce((s, p) => s + p.marketValue, 0) ?? 0
+    const crypto = inv?.positions.filter((p) => p.coinId).reduce((s, p) => s + p.marketValue, 0) ?? 0
+
+    return (
         <div className="space-y-8">
-          <VolatilityFeed events={volatilityEvents} />
-          <WhaleFeed events={whaleEvents} />
+            {/* Live prices */}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+                <span className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" /> Live
+                </span>
+                {LIVE_COINS.map((c) => (
+                    <span key={c} className="tabular-nums">
+                        <span className="font-medium">{COIN_SYMBOL[c]}</span>{' '}
+                        {prices[c] ? (
+                            <>
+                                {usd(prices[c].price)}{' '}
+                                <span className={prices[c].change24h < 0 ? 'text-red-400' : 'text-emerald-400'}>{pct(prices[c].change24h)} 24h</span>
+                            </>
+                        ) : (
+                            <span className="text-muted-foreground">…</span>
+                        )}
+                    </span>
+                ))}
+            </div>
+
+            {/* Investor switcher */}
+            <div className="flex flex-wrap gap-2">
+                {investors.map((i) => (
+                    <button
+                        key={i.id}
+                        onClick={() => setSelected(i.id)}
+                        className={`rounded-lg border px-4 py-2 text-left transition-colors ${selected === i.id ? 'border-primary bg-secondary' : 'hover:bg-secondary/50'}`}
+                    >
+                        <div className="text-sm font-semibold">{i.name}</div>
+                        <div className="text-xs text-muted-foreground">{i.tagline}</div>
+                    </button>
+                ))}
+            </div>
+
+            {!inv ? (
+                <div className="text-muted-foreground">Loading portfolio…</div>
+            ) : (
+                <>
+                    <div>
+                        <h2 className="text-3xl font-bold tracking-tight">{inv.isDemo ? `${inv.name}'s portfolio` : 'Your portfolio'}</h2>
+                        <p className="text-muted-foreground">
+                            {usd(total)} total · {usd(crypto)} in crypto ({total ? ((crypto / total) * 100).toFixed(0) : 0}%)
+                        </p>
+                    </div>
+
+                    {!data.aiEnabled && (
+                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+                            ANTHROPIC_API_KEY is not set, so new insights are disabled.
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+                        <div className="space-y-6 lg:col-span-2">
+                            <Panel title="Crypto moves" action={<span className="text-xs text-muted-foreground">What each move means for {inv.isDemo ? inv.name : 'you'}</span>}>
+                                <div className="mb-5 rounded-lg border border-dashed p-4">
+                                    <div className="text-sm font-medium">Replay a real crash</div>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        Finds the worst single day of the past year in real CoinGecko prices and applies it to this portfolio.
+                                    </p>
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                        {REPLAY_COINS.map((coin) => (
+                                            <button
+                                                key={coin}
+                                                onClick={() => replay(coin)}
+                                                disabled={busy !== null}
+                                                className="rounded-md border bg-secondary px-3 py-1.5 text-sm font-medium hover:bg-secondary/70 disabled:opacity-50"
+                                            >
+                                                {busy === `replay:${coin}` ? 'Fetching history…' : `Worst ${COIN_SYMBOL[coin]} day`}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
+
+                                {data.events.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">No big moves yet. Replay one above; live moves of 1% or more also show up here.</p>
+                                ) : (
+                                    <ul className="divide-y">
+                                        {data.events.map((e) => {
+                                            const affected = e.impact.exposureUsd > 0
+                                            return (
+                                                <li key={e.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                                    <div className="min-w-0">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <span className="font-medium">{e.coin.name}</span>
+                                                            <span className={`font-semibold tabular-nums ${e.changePct < 0 ? 'text-red-400' : 'text-emerald-400'}`}>{pct(e.changePct)}</span>
+                                                            <SourceBadge source={e.source} />
+                                                            <span className="text-xs text-muted-foreground">{e.source === 'replay' ? date(e.occurredAt) : dateTime(e.occurredAt)}</span>
+                                                        </div>
+                                                        <div className="mt-1 text-sm">
+                                                            {affected ? (
+                                                                <>
+                                                                    Your impact: <span className="font-medium tabular-nums text-red-400">{usd(e.impact.impactUsd)}</span>{' '}
+                                                                    <span className="text-muted-foreground">({pct(e.impact.impactPctOfTotal)} of your portfolio)</span>
+                                                                </>
+                                                            ) : (
+                                                                <span className="text-muted-foreground">You don&apos;t hold {e.coin.name}, so this doesn&apos;t change your portfolio.</span>
+                                                            )}
+                                                        </div>
+                                                        {e.insight?.status === 'ready' && (
+                                                            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                                                                <UrgencyBadge urgency={e.insight.urgency} />
+                                                                <span className="text-muted-foreground">{e.insight.headline}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex shrink-0 gap-2">
+                                                        {affected &&
+                                                            (e.insight && e.insight.status !== 'failed' ? (
+                                                                <Link href={`/insights/${e.insight.id}`} className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+                                                                    {e.insight.status === 'generating' ? 'Writing…' : 'Read insight'}
+                                                                </Link>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => explain(e.id)}
+                                                                    disabled={busy !== null || !data.aiEnabled}
+                                                                    className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                                                                >
+                                                                    {busy === `explain:${e.id}` ? 'Starting…' : 'What does this mean for me?'}
+                                                                </button>
+                                                            ))}
+                                                        <Link href={`/events/${e.id}`} className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-secondary">
+                                                            Compare
+                                                        </Link>
+                                                    </div>
+                                                </li>
+                                            )
+                                        })}
+                                    </ul>
+                                )}
+                            </Panel>
+                        </div>
+
+                        <div className="space-y-6">
+                            <Panel
+                                title={inv.isDemo ? `${inv.name}'s plan` : 'Your plan'}
+                                action={
+                                    !inv.isDemo && (
+                                        <Link href="/portfolio/edit" className="text-xs font-medium text-primary hover:underline">
+                                            Edit
+                                        </Link>
+                                    )
+                                }
+                            >
+                                <blockquote className="border-l-2 border-primary/50 pl-3 text-sm italic leading-relaxed">&ldquo;{inv.plan}&rdquo;</blockquote>
+                                <dl className="mt-4 space-y-2 text-sm">
+                                    <Row label="Time horizon" value={inv.timeHorizon} />
+                                    <Row label="Risk comfort" value={<span className="capitalize">{inv.riskComfort}</span>} />
+                                    <Row label="OK if crypto drops up to" value={`${inv.dropComfortPct}%`} />
+                                </dl>
+                            </Panel>
+
+                            <Panel title="Positions">
+                                <ul className="space-y-2 text-sm">
+                                    {inv.positions.map((p) => (
+                                        <li key={p.id}>
+                                            <div className="flex items-center justify-between gap-3">
+                                                <span className={p.coinId ? 'text-amber-300' : ''}>
+                                                    <span className="font-medium">{p.symbol}</span>{' '}
+                                                    <span className={p.coinId ? 'text-amber-300/70' : 'text-muted-foreground'}>{p.name}</span>
+                                                </span>
+                                                <span className="tabular-nums">{usd(p.marketValue)}</span>
+                                            </div>
+                                            <div className="mt-1 h-1 rounded bg-secondary">
+                                                <div className={`h-1 rounded ${p.coinId ? 'bg-amber-400' : 'bg-primary/60'}`} style={{ width: `${(p.marketValue / total) * 100}%` }} />
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </Panel>
+                        </div>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">Educational context only, not financial advice. The AI never tells you to buy or sell.</p>
+                </>
+            )}
         </div>
-      </div>
-    </div>
-  )
+    )
 }
 
-function Card({ children, className }: { children: React.ReactNode, className?: string }) {
-  return <div className={`rounded-xl border bg-card text-card-foreground shadow ${className}`}>{children}</div>
-}
-
-function CardHeader({ children, className }: { children: React.ReactNode, className?: string }) {
-  return <div className={`flex flex-col space-y-1.5 p-6 ${className}`}>{children}</div>
-}
-
-function CardContent({ children, className }: { children: React.ReactNode, className?: string }) {
-  return <div className={`p-6 pt-0 ${className}`}>{children}</div>
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
+    return (
+        <div className="flex justify-between gap-4">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="text-right">{value}</dd>
+        </div>
+    )
 }

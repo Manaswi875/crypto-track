@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata = {
   title: 'Crypto Pulse',
-  description: 'Real-time crypto monitoring and anomaly detection',
+  description: 'What a crypto crash means for your money and your plan',
 }
 
 export default function RootLayout({
@@ -21,16 +21,15 @@ export default function RootLayout({
           <div className="min-h-screen flex flex-col">
             <header className="border-b bg-card/50 backdrop-blur-md sticky top-0 z-50">
               <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-                <div className="flex items-center gap-2">
+                <a href="/" className="flex items-center gap-2">
                   <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center font-bold text-primary-foreground">
                     CP
                   </div>
                   <h1 className="text-xl font-bold tracking-tight">Crypto<span className="text-primary">Pulse</span></h1>
-                </div>
+                </a>
                 <nav className="hidden md:flex items-center gap-6">
-                  <a href="/" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Markets</a>
-                  <a href="/advisor" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Book Monitor</a>
-                  <a href="/advisor/audit" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Audit Trail</a>
+                  <a href="/" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">My Portfolio</a>
+                  <a href="/markets" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Markets</a>
                 </nav>
                 <div className="flex items-center gap-4">
                   <div className="px-3 py-1 bg-secondary rounded-full text-xs font-medium flex items-center gap-2">

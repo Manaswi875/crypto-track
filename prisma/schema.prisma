@@ -48,20 +48,21 @@ model Alert {
 }
 
 model VolatilityEvent {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   coinId        String
-  coin          Coin     @relation(fields: [coinId], references: [id])
+  coin          Coin      @relation(fields: [coinId], references: [id])
   changePct     Float
   severity      String // low, medium, high
-  aiExplanation String?  @db.Text
-  source        String   @default("live") // live, replay
+  aiExplanation String?   @db.Text
+  source        String    @default("live") // live, replay
   startPrice    Float?
   endPrice      Float?
   windowLabel   String? // e.g. "24h", "10m"
   context       Json? // price context captured when the event was created
-  occurredAt    DateTime @default(now())
+  occurredAt    DateTime  @default(now())
   briefs        Brief[]
-  createdAt     DateTime @default(now())
+  createdAt     DateTime  @default(now())
+  Insight       Insight[]
 }
 
 model WhaleTransaction {
@@ -87,7 +88,72 @@ model PriceHistory {
   @@index([coinId, timestamp])
 }
 
-// --- Advisor book monitoring ---
+// --- Personal investors: the core product ---
+
+model Investor {
+  id             String     @id
+  name           String
+  tagline        String // e.g. "Saving for a house"
+  age            Int?
+  riskComfort    String // low, medium, high
+  timeHorizon    String // in their words, e.g. "Until 2035"
+  plan           String     @db.Text // their plan, in their own words
+  dropComfortPct Float // how far crypto could fall before they'd lose sleep
+  isDemo         Boolean    @default(true)
+  positions      Position[]
+  insights       Insight[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model Position {
+  id          String   @id @default(cuid())
+  investorId  String
+  investor    Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  symbol      String
+  name        String
+  assetClass  String // equity, fixed_income, cash, crypto_etf, crypto
+  coinId      String? // underlying crypto exposure
+  marketValue Float
+
+  @@index([investorId])
+}
+
+model Insight {
+  id               String          @id @default(cuid())
+  eventId          String
+  event            VolatilityEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  investorId       String
+  investor         Investor        @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  status           String          @default("generating") // generating, ready, failed
+  // Deterministic numbers, computed in code
+  exposureUsd      Float
+  impactUsd        Float
+  impactPctOfTotal Float
+  // Agent output
+  urgency          String? // check_in_today, good_to_know, within_your_plan
+  headline         String?
+  whatHappened     String?         @db.Text
+  whatItMeans      String?         @db.Text
+  yourPlan         String?         @db.Text
+  questions        Json?
+  citedFacts       Json?
+  complianceFlags  Json?
+  trace            Json?
+  // Run metrics
+  model            String?
+  inputTokens      Int?
+  outputTokens     Int?
+  costUsd          Float?
+  latencyMs        Int?
+  error            String?         @db.Text
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([eventId, investorId])
+}
+
+// --- Advisor book monitoring (the same engine, scaled to an advisor's clients) ---
 
 model Advisor {
   id         String      @id @default(cuid())

@@ -7,15 +7,10 @@ import redis from '@/lib/redis'
 import { audit } from '@/lib/audit'
 import { checkClientMessage } from '@/lib/compliance'
 import { computeEventImpact, HouseholdImpact } from '@/lib/impact'
-import { FALLBACK_BETA, MODEL, costUsd, getAnthropic } from '@/lib/anthropic'
+import { AgentRun } from '@/services/agentCore'
 
 const ADVISOR_FIRST_NAME = 'Alex'
 const CONCURRENCY = 4
-
-export type TraceStep =
-    | { type: 'reasoning'; text: string; atMs: number }
-    | { type: 'tool_call'; tool: string; output: unknown; ms: number; atMs: number }
-    | { type: 'model_turn'; stopReason: string | null; inputTokens: number; outputTokens: number; atMs: number }
 
 const SubmitBriefInput = z.object({
     priority: z
@@ -86,36 +81,13 @@ export async function runBriefAgent(eventId: string, householdId: string, impact
     if (impactIdx === -1) throw new Error(`Household ${householdId} has no exposure to ${event.coinId}`)
     const impact = bookImpacts[impactIdx]
 
-    const trace: TraceStep[] = []
-    const started = Date.now()
+    const agent = new AgentRun()
     let submitted: SubmittedBrief | null = null
 
     // Every tool is bound to this event + household; the model decides which to call.
-    const tool = <T extends z.ZodType>(name: string, description: string, inputSchema: T, run: (input: z.infer<T>) => unknown) =>
-        betaZodTool({
-            name,
-            description,
-            inputSchema,
-            run: async (input) => {
-                const t0 = Date.now()
-                const output = await run(input)
-                trace.push({ type: 'tool_call', tool: name, output, ms: Date.now() - t0, atMs: t0 - started })
-                return JSON.stringify(output)
-            },
-        })
-
     const tools = [
-        tool('get_market_event', 'Details of the market event: asset, % move, start/end price, time window, and whether it is live or a historical replay.', z.object({}), () => ({
-            asset: event.coin.name,
-            symbol: event.coin.symbol.toUpperCase(),
-            change_pct: Number(event.changePct.toFixed(2)),
-            start_price_usd: event.startPrice,
-            end_price_usd: event.endPrice,
-            window: event.windowLabel,
-            occurred_at: event.occurredAt.toISOString().slice(0, 10),
-            source: event.source === 'replay' ? 'historical replay (real past move applied to the current book)' : 'live',
-        })),
-        tool('get_household_profile', 'Client household profile: contact name, risk profile, life stage, tenure, last contact, and the advisor\'s recent meeting notes (internal).', z.object({}), () => ({
+        ...agent.marketTools(event),
+        agent.tool('get_household_profile', 'Client household profile: contact name, risk profile, life stage, tenure, last contact, and the advisor\'s recent meeting notes (internal).', z.object({}), () => ({
             household: household.name,
             primary_contact: household.primaryContact,
             risk_profile: household.riskProfile,
@@ -124,7 +96,7 @@ export async function runBriefAgent(eventId: string, householdId: string, impact
             days_since_last_contact: daysSince(household.lastContactAt),
             meeting_notes_internal: household.notes,
         })),
-        tool('get_household_holdings', 'All holdings in the household with market values and portfolio weights, flagging positions exposed to the event.', z.object({}), () => ({
+        agent.tool('get_household_holdings', 'All holdings in the household with market values and portfolio weights, flagging positions exposed to the event.', z.object({}), () => ({
             total_portfolio_usd: impact.aumUsd,
             holdings: household.holdings
                 .sort((a, b) => b.marketValue - a.marketValue)
@@ -137,87 +109,30 @@ export async function runBriefAgent(eventId: string, householdId: string, impact
                     exposed_to_event: h.coinId === event.coinId,
                 })),
         })),
-        tool('get_event_impact', 'The pre-computed dollar impact of this event on the household. Quote these numbers exactly.', z.object({}), () => ({
+        agent.tool('get_event_impact', 'The pre-computed dollar impact of this event on the household. Quote these numbers exactly.', z.object({}), () => ({
             exposure_usd: impact.exposureUsd,
             exposure_pct_of_portfolio: impact.exposurePctOfAum,
             estimated_impact_usd: impact.impactUsd,
             impact_pct_of_portfolio: impact.impactPctOfAum,
             rank_in_book: `${impactIdx + 1} of ${bookImpacts.length} affected households by dollar impact`,
         })),
-        tool('get_price_context', 'Longer-term price context for the asset (e.g. change over 30/90/365 days, 1-year high and low), useful for putting the move in perspective.', z.object({}), async () => {
-            if (event.context) return event.context
-            const recent = await prisma.priceHistory.findMany({
-                where: { coinId: event.coinId },
-                orderBy: { timestamp: 'desc' },
-                take: 200,
-            })
-            if (recent.length === 0) return { note: 'No price history available.' }
-            const prices = recent.map((p) => p.price)
-            return {
-                note: 'Recent live samples only',
-                latest_price_usd: prices[0],
-                high_usd: Math.max(...prices),
-                low_usd: Math.min(...prices),
-                samples: prices.length,
-                since: recent[recent.length - 1].timestamp.toISOString(),
-            }
-        }),
         betaZodTool({
             name: 'submit_brief',
             description: 'Submit the finished brief and draft client message. Call exactly once, at the end.',
             inputSchema: SubmitBriefInput,
             run: async (input) => {
                 submitted = input
-                trace.push({ type: 'tool_call', tool: 'submit_brief', output: { priority: input.priority }, ms: 0, atMs: Date.now() - started })
+                agent.trace.push({ type: 'tool_call', tool: 'submit_brief', output: { priority: input.priority }, ms: 0, atMs: Date.now() - agent.started })
                 return 'Brief recorded.'
             },
         }),
     ]
 
-    const client = getAnthropic()
-    const runner = client.beta.messages.toolRunner({
-        model: MODEL,
-        max_tokens: 16000,
-        betas: [FALLBACK_BETA],
-        fallbacks: 'default',
-        thinking: { type: 'adaptive', display: 'summarized' },
+    const result = await agent.run({
         system: SYSTEM_PROMPT,
         tools,
-        max_iterations: 10,
-        messages: [
-            {
-                role: 'user',
-                content: `Prepare the brief and draft client message for the ${household.name} regarding the ${event.coin.name} move.`,
-            },
-        ],
+        userMessage: `Prepare the brief and draft client message for the ${household.name} regarding the ${event.coin.name} move.`,
     })
-
-    const usage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }
-    let servedModel: string = MODEL
-
-    for await (const message of runner) {
-        usage.input_tokens += message.usage.input_tokens
-        usage.output_tokens += message.usage.output_tokens
-        usage.cache_creation_input_tokens += message.usage.cache_creation_input_tokens ?? 0
-        usage.cache_read_input_tokens += message.usage.cache_read_input_tokens ?? 0
-        servedModel = message.model
-
-        for (const block of message.content) {
-            if (block.type === 'thinking' && block.thinking.trim()) {
-                trace.push({ type: 'reasoning', text: block.thinking.trim(), atMs: Date.now() - started })
-            }
-        }
-        trace.push({
-            type: 'model_turn',
-            stopReason: message.stop_reason,
-            inputTokens: message.usage.input_tokens,
-            outputTokens: message.usage.output_tokens,
-            atMs: Date.now() - started,
-        })
-
-        if (message.stop_reason === 'refusal') throw new Error('Model declined to produce this brief')
-        if (message.stop_reason === 'max_tokens') throw new Error('Model output was truncated (max_tokens)')
-    }
 
     const brief = submitted as SubmittedBrief | null
     if (!brief) throw new Error('Agent finished without submitting a brief')
@@ -225,11 +140,8 @@ export async function runBriefAgent(eventId: string, householdId: string, impact
     return {
         brief,
         impact,
-        trace,
-        usage,
-        model: servedModel,
-        costUsd: costUsd(usage),
-        latencyMs: Date.now() - started,
+        trace: agent.trace,
+        ...result,
         complianceFlags: checkClientMessage(brief.client_message),
     }
 }
@@ -252,7 +164,7 @@ async function generateBrief(briefId: string, impacts: HouseholdImpact[]) {
                 complianceFlags: result.complianceFlags,
                 trace: result.trace as unknown as Prisma.InputJsonValue,
                 model: result.model,
-                inputTokens: result.usage.input_tokens + result.usage.cache_creation_input_tokens + result.usage.cache_read_input_tokens,
+                inputTokens: result.totalInputTokens,
                 outputTokens: result.usage.output_tokens,
                 costUsd: result.costUsd,
                 latencyMs: result.latencyMs,
