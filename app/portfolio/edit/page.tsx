@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { Panel } from '@/components/Badges'
+import { DRAFT_KEY, ProfileDraft } from '@/lib/draft'
 
 type CoinId = 'bitcoin' | 'ethereum' | 'solana'
 type CryptoHolding = { coinId: CoinId; heldVia: 'fund' | 'direct'; fund: string; marketValue: number; investedUsd: number | null }
@@ -27,6 +28,7 @@ export default function EditPortfolio() {
     const [loaded, setLoaded] = useState(false)
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [draft, setDraft] = useState<ProfileDraft | null>(null)
 
     useEffect(() => {
         fetch('/api/investors/you').then(async (r) => {
@@ -50,6 +52,31 @@ export default function EditPortfolio() {
             )
             setCashUsd(positions.filter((p) => p.assetClass === 'cash').reduce((s, p) => s + p.marketValue, 0))
             setInvestmentsUsd(positions.filter((p) => !p.coinId && p.assetClass !== 'cash').reduce((s, p) => s + p.marketValue, 0))
+
+            // An AI draft from the setup page overrides whatever it filled in; the user reviews before saving
+            let d: ProfileDraft | null = null
+            try {
+                if (new URLSearchParams(window.location.search).get('draft')) d = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? 'null')
+            } catch {}
+            if (d) {
+                setDraft(d)
+                if (d.goal) setGoal(d.goal)
+                if (d.cryptoReason) setCryptoReason(d.cryptoReason)
+                if (d.timeHorizon) setTimeHorizon(d.timeHorizon)
+                if (d.dropComfortPct != null) setDropComfortPct(d.dropComfortPct)
+                if (d.crypto.length)
+                    setCrypto(
+                        d.crypto.map((c) => ({
+                            coinId: c.coinId,
+                            heldVia: c.heldVia,
+                            fund: c.heldVia === 'fund' ? (c.fund ?? '') : '',
+                            marketValue: c.marketValue ?? 0,
+                            investedUsd: c.investedUsd,
+                        })),
+                    )
+                if (d.cashUsd != null) setCashUsd(d.cashUsd)
+                if (d.investmentsUsd != null) setInvestmentsUsd(d.investmentsUsd)
+            }
             setLoaded(true)
         })
     }, [])
@@ -64,7 +91,10 @@ export default function EditPortfolio() {
         })
         setSaving(false)
         if (!res.ok) return setError((await res.json()).error ?? 'Could not save')
-        router.push('/?investor=you')
+        try {
+            sessionStorage.removeItem(DRAFT_KEY)
+        } catch {}
+        router.push('/')
     }
 
     const update = (idx: number, patch: Partial<CryptoHolding>) => setCrypto((cs) => cs.map((c, i) => (i === idx ? { ...c, ...patch } : c)))
@@ -74,10 +104,43 @@ export default function EditPortfolio() {
     return (
         <div className="mx-auto max-w-2xl space-y-6">
             <div>
-                <Link href="/?investor=you" className="text-sm text-muted-foreground hover:text-foreground">← Your portfolio</Link>
+                <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">← Today</Link>
                 <h2 className="mt-2 text-3xl font-bold tracking-tight">Your goal and your money</h2>
-                <p className="text-muted-foreground">Set this while you&apos;re calm. When crypto crashes, the app measures the drop against it.</p>
+                <p className="text-muted-foreground">
+                    Set this while you&apos;re calm. When crypto crashes, the app measures the drop against it.{' '}
+                    {!draft && (
+                        <Link href="/setup" className="text-primary hover:underline">
+                            Or describe it in your own words →
+                        </Link>
+                    )}
+                </p>
             </div>
+
+            {draft && (
+                <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm">
+                    <div className="font-medium text-violet-200">Filled in by AI from your description. Check each field, then save.</div>
+                    {draft.assumptions.length > 0 && (
+                        <div className="mt-2">
+                            <div className="text-xs uppercase tracking-wider text-muted-foreground">What it assumed</div>
+                            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                                {draft.assumptions.map((a, i) => (
+                                    <li key={i}>{a}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                    {draft.missing.length > 0 && (
+                        <div className="mt-2">
+                            <div className="text-xs uppercase tracking-wider text-amber-300">Still needed</div>
+                            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-amber-200">
+                                {draft.missing.map((m, i) => (
+                                    <li key={i}>{m}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+            )}
 
             <Panel title="Your goal">
                 <div className="space-y-4">
@@ -168,7 +231,7 @@ export default function EditPortfolio() {
 
             {error && <p className="text-sm text-red-400">{error}</p>}
             <div className="flex justify-end gap-2">
-                <Link href="/?investor=you" className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-secondary">Cancel</Link>
+                <Link href="/" className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-secondary">Cancel</Link>
                 <button onClick={save} disabled={saving} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
                     {saving ? 'Saving…' : 'Save'}
                 </button>

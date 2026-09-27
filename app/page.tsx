@@ -205,9 +205,10 @@ export default function TodayPage() {
                                 title={inv.isDemo ? `${inv.name}'s goal` : 'Your goal'}
                                 action={
                                     !inv.isDemo && (
-                                        <Link href="/portfolio/edit" className="text-xs font-medium text-primary hover:underline">
-                                            Edit
-                                        </Link>
+                                        <span className="flex gap-3 text-xs font-medium">
+                                            <Link href="/setup" className="text-primary hover:underline">Describe it with AI</Link>
+                                            <Link href="/portfolio/edit" className="text-primary hover:underline">Edit</Link>
+                                        </span>
                                     )
                                 }
                             >
