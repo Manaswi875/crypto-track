@@ -243,7 +243,7 @@ export default function Markets() {
                 </div>
             </div>
 
-            <p className="text-xs text-muted-foreground">Market data from CoinGecko. Informational only, not investment advice.</p>
+            <p className="text-xs text-muted-foreground">Market data from CoinGecko.</p>
         </div>
     )
 }

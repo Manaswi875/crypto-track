@@ -294,7 +294,6 @@ export default function MyPortfolio() {
                         </div>
                     </div>
 
-                    <p className="text-xs text-muted-foreground">Educational context only, not financial advice. The AI never tells you to buy or sell.</p>
                 </>
             )}
         </div>

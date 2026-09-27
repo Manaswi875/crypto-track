@@ -127,7 +127,7 @@ export default function InsightPage({ params }: { params: { id: string } }) {
                             )}
                         </div>
                         <div className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t pt-4 text-xs text-muted-foreground">
-                            <span>Educational context, not financial advice.</span>
+                            <span />
                             {flags.length === 0 ? (
                                 <span className="text-emerald-400">✓ Passed the no-advice check</span>
                             ) : (
