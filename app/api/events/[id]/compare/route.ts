@@ -10,7 +10,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
     const investors = await prisma.investor.findMany({
         include: { positions: true, insights: { where: { eventId: event.id } } },
-        orderBy: { createdAt: 'asc' },
+        orderBy: [{ isDemo: 'asc' }, { createdAt: 'asc' }],
     })
 
     return NextResponse.json({
