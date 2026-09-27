@@ -1,7 +1,7 @@
 'use client'
 
 import { Line, LineChart, ResponsiveContainer, YAxis } from 'recharts'
-import { Panel } from '@/components/advisor/Badges'
+import { Panel } from '@/components/Badges'
 import { pct, price, usd } from '@/lib/format'
 
 export type Coin = {

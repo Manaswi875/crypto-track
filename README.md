@@ -14,9 +14,9 @@ Price apps tell you "BTC −14%". Crypto Pulse tells you: *"You're down $1,407, 
 
 **Compare** shows the same crash for different people. A long-term believer, someone saving for a house, and someone about to retire get very different, but equally honest, insights.
 
-## Scaling to advisors
+## Scaling up
 
-The engine runs per portfolio. `/advisor` runs the same agent across a financial advisor's book of 60 client households: it ranks households by dollar impact and drafts a brief plus a client message for each. Nothing is sent without advisor approval, and every draft and decision is recorded in an audit trail.
+The engine runs per portfolio: the same tools, prompt rules, and impact math work for one person or, run across many portfolios, for a financial advisor's whole client book, with an advisor approving each message before it goes out.
 
 ## Tech stack
 
@@ -33,21 +33,20 @@ The engine runs per portfolio. `/advisor` runs the same agent across a financial
 |---|---|
 | `services/agentCore.ts` | Shared agent engine: tool loop, traced tools, usage and cost accounting |
 | `services/insightAgent.ts` | Personal insight agent (prompt, tools, output schema) |
-| `services/briefAgent.ts` | Advisor brief agent, the same engine at advisor scale |
+| `services/followUp.ts` | Follow-up questions, streamed, with the same guardrails |
 | `lib/impact.ts` | Deterministic impact math the agents must quote |
 | `lib/compliance.ts` | No-advice / no-prediction checks |
-| `services/replay.ts` | Finds the worst real one-day drop of the past year |
+| `services/replay.ts` | Finds distinct real crash days from the past year, with every coin's move |
 
 ## Setup
 
 1. `npm install`
-2. `cp .env.example .env`, then set `NEXTAUTH_SECRET` (e.g. `openssl rand -base64 32`) and `ANTHROPIC_API_KEY`
+2. `cp .env.example .env`, then set `ANTHROPIC_API_KEY`
 3. Start Postgres and Redis: `docker compose up -d db redis`
 4. Set up the database: `npx prisma db push && npx prisma db seed`
 5. Run the dev server: `npm run dev:server`, then open http://localhost:3000
 
-AI calls only happen when you ask for an insight, and each insight is cached per move and portfolio, so viewing it again is free. Live auto-explanations of price anomalies are off by default (`ENABLE_LIVE_AI_EXPLANATIONS`).
-
+AI calls only happen when you ask for an insight, and each insight is cached per move and portfolio, so viewing it again is free. 
 ### Production and Docker
 
 ```bash

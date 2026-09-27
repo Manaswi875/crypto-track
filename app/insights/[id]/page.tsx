@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { Moves, eventTitle } from '@/components/Moves'
 import { useCallback, useEffect, useState } from 'react'
-import { Panel, UrgencyBadge } from '@/components/advisor/Badges'
+import { Panel, UrgencyBadge } from '@/components/Badges'
 import { TOOL_LABEL, Trace, TraceStep } from '@/components/Trace'
 import { FollowUp, ThreadMessage } from '@/components/FollowUp'
 import { date, dateTime, pct, usd } from '@/lib/format'

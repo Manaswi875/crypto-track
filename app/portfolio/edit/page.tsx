@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Panel } from '@/components/advisor/Badges'
+import { Panel } from '@/components/Badges'
 
 type CoinId = 'bitcoin' | 'ethereum' | 'solana'
 type CryptoHolding = { coinId: CoinId; heldVia: 'fund' | 'direct'; fund: string; marketValue: number; investedUsd: number | null }
