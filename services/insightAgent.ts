@@ -14,7 +14,7 @@ const SubmitInsightInput = z.object({
     headline: z.string().describe('One calm sentence, at most 14 words, summarising what this means for them'),
     what_happened: z.string().describe('1-2 sentences on the move itself, with its size in context'),
     what_it_means: z.string().describe('1-3 sentences on what it means for their money, quoting the exact $ and % figures'),
-    your_plan: z.string().describe("1-3 sentences connecting the move to the plan they wrote, in their own words where possible"),
+    your_goal: z.string().describe('1-2 sentences connecting the move to their goal and when they need the money'),
     questions: z
         .array(z.string())
         .describe('2-3 questions for them to reflect on. Questions, never instructions or recommendations.'),
@@ -35,8 +35,8 @@ const SYSTEM_PROMPT = `You help an individual investor make sense of a sharp mov
 
 Write directly to them ("you"), in calm, plain English, like a knowledgeable friend who knows their finances. Help them see:
 1. What happened, and how big it is in context.
-2. What it means for their money, in dollars and as a share of their total portfolio.
-3. How it relates to the plan they wrote, in their own words.
+2. What it means for their money, in dollars and as a share of everything they have.
+3. How it relates to their goal and when they need the money.
 4. Whether anything deserves their attention today.
 
 Gather what you need with the tools.
@@ -45,10 +45,11 @@ Rules:
 - You are not a financial adviser. Never tell them to buy, sell, hold, rebalance, or "buy the dip". Never predict prices or promise outcomes. You give context; they decide. An automated compliance check runs on your output.
 - Every number you state must come from a tool result. Quote dollar and percentage figures exactly as returned by get_my_impact. Never calculate your own figures.
 - You only have data on this one asset's move. Do not claim how their other holdings or the wider market performed.
-- If the move is larger than the drop they said they are comfortable with, or their plan mentions needing this money soon, say so plainly and kindly. Suggest questions to reflect on, including whether to talk to a licensed financial adviser, but do not tell them what to do.
+- Use plain words for their holdings ("your Bitcoin fund", "your cash and savings"), not ticker symbols alone.
+- If the move is larger than the drop they said they are comfortable with, or they need the money soon, say so plainly and kindly. Suggest questions to reflect on, including whether to talk to a licensed financial adviser, but do not tell them what to do.
 - Urgency:
-  - check_in_today: the move is bigger than the drop they said they are comfortable with, or the loss is 5% or more of their total portfolio, or their plan says they will need this money within about a year.
-  - within_your_plan: the move is within their stated comfort, the loss is small relative to their total, and their plan is long-term.
+  - check_in_today: the move is bigger than the drop they said they are comfortable with, or the loss is 5% or more of their total portfolio, or they need the money within about a year.
+  - within_your_plan: the move is within their stated comfort, the loss is small relative to their total, and they do not need the money for several years.
   - good_to_know: anything in between.
 - Keep it short. The whole insight should be readable in under a minute.
 
@@ -68,25 +69,23 @@ export async function runInsightAgent(eventId: string, investorId: string, onSte
 
     const tools = [
         ...agent.marketTools(event),
-        agent.tool('get_my_profile', "The investor's profile and the plan they wrote in their own words, including how far they said their crypto could fall before they'd lose sleep.", z.object({}), () => ({
+        agent.tool('get_my_profile', "The investor's goal, when they need the money, and how far they said their crypto could fall before they'd lose sleep.", z.object({}), () => ({
             name: investor.name,
             age: investor.age,
-            risk_comfort: investor.riskComfort,
-            time_horizon: investor.timeHorizon,
-            plan_in_their_words: investor.plan,
+            goal: investor.goal,
+            needs_the_money: investor.timeHorizon,
             comfortable_with_crypto_drop_up_to_pct: investor.dropComfortPct,
         })),
-        agent.tool('get_my_positions', "All of the investor's positions with market values and portfolio weights, flagging those exposed to this move.", z.object({}), () => ({
-            total_portfolio_usd: impact.totalUsd,
-            positions: [...investor.positions]
+        agent.tool('get_my_positions', "Everything the investor holds: each crypto holding, plus their cash & savings and stocks & bonds, with values and share of the total, flagging what this move affects.", z.object({}), () => ({
+            total_usd: impact.totalUsd,
+            holdings: [...investor.positions]
                 .sort((a, b) => b.marketValue - a.marketValue)
                 .map((p) => ({
-                    symbol: p.symbol,
                     name: p.name,
-                    asset_class: p.assetClass,
-                    market_value_usd: p.marketValue,
-                    weight_pct: Number(((p.marketValue / impact.totalUsd) * 100).toFixed(2)),
-                    exposed_to_move: p.coinId === event.coinId,
+                    type: p.assetClass === 'crypto_etf' ? 'crypto fund' : p.assetClass === 'crypto' ? 'crypto held directly' : p.name.toLowerCase(),
+                    value_usd: p.marketValue,
+                    share_of_total_pct: Number(((p.marketValue / impact.totalUsd) * 100).toFixed(2)),
+                    affected_by_this_move: p.coinId === event.coinId,
                 })),
         })),
         agent.tool('get_my_impact', 'The pre-computed dollar impact of this move on the investor, and how the move compares with the drop they said they are comfortable with. Quote these numbers exactly.', z.object({}), () => ({
@@ -119,7 +118,7 @@ export async function runInsightAgent(eventId: string, investorId: string, onSte
     const insight = submitted as SubmittedInsight | null
     if (!insight) throw new Error('Agent finished without submitting an insight')
 
-    const investorFacing = [insight.headline, insight.what_happened, insight.what_it_means, insight.your_plan, ...insight.questions].join('\n')
+    const investorFacing = [insight.headline, insight.what_happened, insight.what_it_means, insight.your_goal, ...insight.questions].join('\n')
 
     return {
         insight,
@@ -175,7 +174,7 @@ async function generate(insightId: string, eventId: string, investorId: string) 
                 headline: r.insight.headline,
                 whatHappened: r.insight.what_happened,
                 whatItMeans: r.insight.what_it_means,
-                yourPlan: r.insight.your_plan,
+                yourGoal: r.insight.your_goal,
                 questions: r.insight.questions,
                 citedFacts: r.insight.cited_facts,
                 complianceFlags: r.complianceFlags,

@@ -93,12 +93,11 @@ model PriceHistory {
 model Investor {
   id             String     @id
   name           String
-  tagline        String // e.g. "Saving for a house"
+  tagline        String     // e.g. "Saving for a house"
   age            Int?
-  riskComfort    String // low, medium, high
-  timeHorizon    String // in their words, e.g. "Until 2035"
-  plan           String     @db.Text // their plan, in their own words
-  dropComfortPct Float // how far crypto could fall before they'd lose sleep
+  goal           String     // short, e.g. "Buy our first home"
+  timeHorizon    String     // when they need the money, e.g. "Spring 2027"
+  dropComfortPct Float      // how far crypto could fall before they'd lose sleep
   isDemo         Boolean    @default(true)
   positions      Position[]
   insights       Insight[]
@@ -110,10 +109,10 @@ model Position {
   id          String   @id @default(cuid())
   investorId  String
   investor    Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
-  symbol      String
-  name        String
-  assetClass  String // equity, fixed_income, cash, crypto_etf, crypto
-  coinId      String? // underlying crypto exposure
+  symbol      String   // fund ticker for crypto funds (IBIT), coin symbol when held directly, or CASH / INVEST
+  name        String   // plain-English label shown to the user
+  assetClass  String   // crypto_etf, crypto, cash, investments
+  coinId      String?  // underlying crypto exposure
   marketValue Float
 
   @@index([investorId])
@@ -135,7 +134,7 @@ model Insight {
   headline         String?
   whatHappened     String?         @db.Text
   whatItMeans      String?         @db.Text
-  yourPlan         String?         @db.Text
+  yourGoal         String?         @db.Text
   questions        Json?
   citedFacts       Json?
   complianceFlags  Json?

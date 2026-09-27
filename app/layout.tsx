@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata = {
   title: 'Crypto Pulse',
-  description: 'What a crypto crash means for your money and your plan',
+  description: 'What a crypto crash means for your money and your goals',
 }
 
 export default function RootLayout({
