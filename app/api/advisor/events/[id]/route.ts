@@ -12,7 +12,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         computeEventImpact(event.id),
         prisma.brief.findMany({
             where: { eventId: event.id },
-            select: { id: true, householdId: true, status: true, priority: true, complianceFlags: true, latencyMs: true, costUsd: true, error: true },
+            select: { id: true, householdId: true, status: true, priority: true, complianceFlags: true, latencyMs: true, error: true },
         }),
     ])
 

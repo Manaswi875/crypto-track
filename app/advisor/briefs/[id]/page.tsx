@@ -28,7 +28,6 @@ type BriefData = {
         model: string | null
         inputTokens: number | null
         outputTokens: number | null
-        costUsd: number | null
         latencyMs: number | null
         error: string | null
         event: { coin: { name: string }; changePct: number; source: string; occurredAt: string }
@@ -202,7 +201,7 @@ export default function BriefReview({ params }: { params: { id: string } }) {
                         action={
                             brief.latencyMs != null && (
                                 <span className="text-xs text-muted-foreground tabular-nums">
-                                    {brief.model} · {(brief.latencyMs / 1000).toFixed(1)}s · {brief.inputTokens?.toLocaleString()} in / {brief.outputTokens?.toLocaleString()} out · ${brief.costUsd?.toFixed(4)}
+                                    {brief.model} · {(brief.latencyMs / 1000).toFixed(1)}s · {brief.inputTokens?.toLocaleString()} in / {brief.outputTokens?.toLocaleString()} out
                                 </span>
                             )
                         }

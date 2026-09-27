@@ -42,8 +42,6 @@ export async function GET() {
         editedBeforeApproval: reviewed.filter((b) => b.edited).length,
         complianceFlagged: briefs.filter((b) => Array.isArray(b.complianceFlags) && b.complianceFlags.length > 0).length,
         avgLatencySec: done.length ? done.reduce((s, b) => s + (b.latencyMs ?? 0), 0) / done.length / 1000 : null,
-        avgCostUsd: done.length ? done.reduce((s, b) => s + (b.costUsd ?? 0), 0) / done.length : null,
-        totalCostUsd: done.reduce((s, b) => s + (b.costUsd ?? 0), 0),
         manualMinutesPerHousehold: MANUAL_MINUTES_PER_HOUSEHOLD,
     }
 
