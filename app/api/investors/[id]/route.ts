@@ -5,6 +5,8 @@ import { listEvents } from '@/lib/events'
 import { eventMoves, portfolioImpact } from '@/lib/impact'
 import { hasAnthropicKey } from '@/lib/anthropic'
 import { livePrices, loadInvestor, unitsFor } from '@/lib/investors'
+import { marketToday } from '@/lib/marketStats'
+import { afterEffects } from '@/services/replay'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,13 +23,42 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     ])
     const insightByEvent = new Map(insights.map((i) => [i.eventId, i]))
 
+    const crypto = investor.positions.filter((p) => p.coinId)
+    const heldCoins = [...new Set(crypto.map((p) => p.coinId as string))]
+    const [market, after] = await Promise.all([
+        marketToday(heldCoins).catch(() => null),
+        afterEffects(events.filter((e) => e.source === 'replay').map((e) => e.occurredAt.toISOString().slice(0, 10))).catch(() => ({})),
+    ])
+
+    // Today, in numbers: what the crypto did in 24h, and profit/loss against what went in
+    const cryptoValue = crypto.reduce((s, p) => s + p.marketValue, 0)
+    const change24hUsd = crypto.reduce((s, p) => s + p.change24hUsd, 0)
+    const withCost = crypto.filter((p) => p.investedUsd != null)
+    const invested = withCost.reduce((s, p) => s + (p.investedUsd ?? 0), 0)
+    const today = {
+        totalUsd: investor.positions.reduce((s, p) => s + p.marketValue, 0),
+        cryptoUsd: cryptoValue,
+        change24hUsd,
+        change24hPct: cryptoValue - change24hUsd ? (change24hUsd / (cryptoValue - change24hUsd)) * 100 : 0,
+        investedUsd: withCost.length ? invested : null,
+        gainUsd: withCost.length ? withCost.reduce((s, p) => s + p.marketValue, 0) - invested : null,
+        marketChange24hPct: market?.change24hPct ?? null,
+        coins: market
+            ? Object.fromEntries(
+                  Object.values(market.coins).map((c) => [c.coinId, { change24hPct: c.change24hPct, typicalDailyMovePct: c.typicalDailyMovePct, todayVsTypical: c.todayVsTypical }]),
+              )
+            : {},
+    }
+
     return NextResponse.json({
         investor,
         aiEnabled: hasAnthropicKey(),
+        today,
         events: events.map((e) => ({
             ...e,
             impact: portfolioImpact(investor.positions, eventMoves(e)),
             insight: insightByEvent.get(e.id) ?? null,
+            after: e.source === 'replay' ? ((after as Record<string, unknown>)[e.occurredAt.toISOString().slice(0, 10)] ?? null) : null,
         })),
     })
 }

@@ -137,3 +137,27 @@ export function ensureCrashEvents() {
     })
     return ensured
 }
+
+export type AfterEffect = { days: number; moves: Record<string, number> } | null
+
+/**
+ * What actually happened after each past crash: each coin's change from the
+ * crash-day close to 7 and 30 days later. History, not a prediction; null
+ * when that much time hasn't passed yet.
+ */
+export async function afterEffects(dates: string[]): Promise<Record<string, { d7: AfterEffect; d30: AfterEffect }>> {
+    const series = await loadYear()
+    const out: Record<string, { d7: AfterEffect; d30: AfterEffect }> = {}
+    const later = (date: string, days: number): AfterEffect => {
+        const moves: Record<string, number> = {}
+        for (const c of REPLAY_COINS) {
+            const day = series[c].byDay.get(date)
+            const future = day && series[c].prices[day.idx + days]
+            if (!day || !future) return null
+            moves[c] = pctChange(day.close, future[1])
+        }
+        return { days, moves }
+    }
+    for (const date of dates) out[date] = { d7: later(date, 7), d30: later(date, 30) }
+    return out
+}
