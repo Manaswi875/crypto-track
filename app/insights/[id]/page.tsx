@@ -27,7 +27,6 @@ type InsightData = {
         model: string | null
         inputTokens: number | null
         outputTokens: number | null
-        costUsd: number | null
         latencyMs: number | null
         error: string | null
         createdAt: string
@@ -59,7 +58,7 @@ export default function InsightPage({ params }: { params: { id: string } }) {
     }, [generating, load])
 
     async function regenerate() {
-        if (!data || !confirm('Run the AI again for this insight? This uses API credits (about $0.10).')) return
+        if (!data || !confirm('Run the AI again for this insight?')) return
         setRegenerating(true)
         await fetch('/api/insights', {
             method: 'POST',
@@ -171,7 +170,7 @@ export default function InsightPage({ params }: { params: { id: string } }) {
                         title="How the AI got here"
                         action={
                             <span className="text-xs tabular-nums text-muted-foreground">
-                                {i.model} · {((i.latencyMs ?? 0) / 1000).toFixed(1)}s · ${i.costUsd?.toFixed(3)}
+                                {i.model} · {((i.latencyMs ?? 0) / 1000).toFixed(1)}s
                             </span>
                         }
                     >

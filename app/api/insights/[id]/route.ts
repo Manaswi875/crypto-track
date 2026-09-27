@@ -9,11 +9,12 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         include: { event: { include: { coin: true } }, investor: { include: { positions: { orderBy: { marketValue: 'desc' } } } } },
     })
     if (!insight) return NextResponse.json({ error: 'Insight not found' }, { status: 404 })
+    const { costUsd: _cost, ...publicInsight } = insight
 
     // Other investors' insights for the same move, for switching between them
     const siblings = await prisma.insight.findMany({
         where: { eventId: insight.eventId, status: 'ready' },
         select: { id: true, investorId: true, urgency: true, investor: { select: { name: true } } },
     })
-    return NextResponse.json({ insight, siblings })
+    return NextResponse.json({ insight: publicInsight, siblings })
 }

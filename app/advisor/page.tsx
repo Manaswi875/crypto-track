@@ -26,8 +26,6 @@ type Overview = {
         editedBeforeApproval: number
         complianceFlagged: number
         avgLatencySec: number | null
-        avgCostUsd: number | null
-        totalCostUsd: number
         manualMinutesPerHousehold: number
     }
 }
@@ -172,8 +170,6 @@ export default function BookMonitor() {
                         />
                         <Row label="Compliance flags raised" value={metrics.complianceFlagged} />
                         <Row label="Avg time per brief" value={metrics.avgLatencySec != null ? `${metrics.avgLatencySec.toFixed(1)}s` : '—'} />
-                        <Row label="Avg cost per brief" value={metrics.avgCostUsd != null ? `$${metrics.avgCostUsd.toFixed(3)}` : '—'} />
-                        <Row label="Total AI spend" value={`$${metrics.totalCostUsd.toFixed(2)}`} />
                         <div className="border-t pt-3">
                             <Row label="Est. advisor time saved" value={`${hoursSaved.toFixed(1)} h`} />
                             <p className="mt-1 text-xs text-muted-foreground">

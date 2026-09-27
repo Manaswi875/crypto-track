@@ -10,7 +10,7 @@ Price apps tell you "BTC −14%". Crypto Pulse tells you: *"You're down $1,407, 
 2. **A big move happens**: live (the price tracker flags moves of 1%+), or a replay of a real historical crash from CoinGecko data.
 3. **Your impact is computed in code**, not by the AI: exact dollars and share of your portfolio.
 4. **An AI agent writes your insight**: Claude uses tools to look up the move, your plan, your positions, your computed impact, and longer-term price context, then writes what happened, what it means for you, how it relates to your plan, and questions worth asking yourself, with an urgency level.
-5. **Guardrails**: an automated check blocks buy/sell instructions, price predictions, and guarantees. Every fact is cited back to the tool it came from, and the full agent trace, time, and cost are shown.
+5. **Guardrails**: an automated check blocks buy/sell instructions, price predictions, and guarantees. Every fact is cited back to the tool it came from, and the full agent trace is shown.
 
 **Compare** shows the same crash for different people. A long-term believer, someone saving for a house, and someone about to retire get very different, but equally honest, insights.
 

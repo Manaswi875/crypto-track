@@ -15,7 +15,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     if (!brief) return NextResponse.json({ error: 'Brief not found' }, { status: 404 })
 
     const auditLog = await prisma.auditLog.findMany({ where: { entityId: brief.id }, orderBy: { createdAt: 'asc' } })
-    return NextResponse.json({ brief, auditLog })
+    const { costUsd: _cost, ...publicBrief } = brief
+    return NextResponse.json({ brief: publicBrief, auditLog })
 }
 
 const Body = z.discriminatedUnion('action', [
