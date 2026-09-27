@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Area, AreaChart, CartesianGrid, ReferenceDot, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useSocket } from '@/context/SocketContext'
 import { Panel } from '@/components/Badges'
-import { Figure, Holding, HoldingMarketCard } from '@/components/HoldingMarketCard'
+import { Holding, HoldingMarketCard } from '@/components/HoldingMarketCard'
 import { movesOf } from '@/components/Moves'
 import { date, dateTime, pct, price, usd } from '@/lib/format'
 
@@ -114,6 +114,7 @@ export default function MarketInsights() {
     }, [socket])
 
     const coins = market ? Object.values(market.coins).sort((a, b) => b.marketCap - a.marketCap) : []
+    const owned = new Set(mine?.holdings.map((h) => h.coinId) ?? [])
     const selected = market?.coins[coinId]
 
     const range = useMemo(() => {
@@ -229,6 +230,7 @@ export default function MarketInsights() {
                                         >
                                             <td className="px-5 py-2.5">
                                                 <span className="font-medium">{c.name}</span> <span className="text-xs text-muted-foreground">{c.symbol}</span>
+                                                {owned.has(c.coinId) && <span className="ml-2 rounded-full border border-amber-500/40 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">You own</span>}
                                             </td>
                                             <td className="px-3 py-2.5 text-right tabular-nums">{price(c.price)}</td>
                                             <td className="px-3 py-2.5 text-right"><Change v={c.change24hPct} /></td>
@@ -321,17 +323,7 @@ export default function MarketInsights() {
                 <section id="yours" className="space-y-4">
                     <div>
                         <h3 className="text-xl font-semibold tracking-tight">{mine.investor.isDemo ? `${mine.investor.name}'s investments` : 'Your investments'} in this market</h3>
-                        <p className="text-sm text-muted-foreground">What each is worth today, what went in, and how its market looks.</p>
-                    </div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                        <Figure label="Crypto worth today" value={usd(mine.totals.sellValueUsd)} />
-                        <Figure label="You put in" value={mine.totals.investedUsd != null ? usd(mine.totals.investedUsd) : '—'} />
-                        <Figure
-                            label={mine.totals.gainUsd == null ? 'Profit or loss' : mine.totals.gainUsd >= 0 ? 'Profit overall' : 'Loss overall'}
-                            value={mine.totals.gainUsd != null ? usd(mine.totals.gainUsd, { sign: true }) : '—'}
-                            hint={mine.totals.gainPct != null ? pct(mine.totals.gainPct, 1) : undefined}
-                            tone={mine.totals.gainUsd == null ? undefined : mine.totals.gainUsd >= 0 ? 'green' : 'red'}
-                        />
+                        <p className="text-sm text-muted-foreground">How the market looks for each coin you hold, next to what it&apos;s worth and what went in.</p>
                     </div>
                     {mine.totals.missingInvested > 0 && !mine.investor.isDemo && (
                         <p className="text-sm text-muted-foreground">

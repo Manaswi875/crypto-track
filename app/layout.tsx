@@ -28,7 +28,7 @@ export default function RootLayout({
                   <h1 className="text-xl font-bold tracking-tight">Crypto<span className="text-primary">Pulse</span></h1>
                 </a>
                 <nav className="hidden md:flex items-center gap-6">
-                  <a href="/" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">My Portfolio</a>
+                  <a href="/" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Today</a>
                   <a href="/markets" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Market Insights</a>
                 </nav>
                 <div className="flex items-center gap-4">
