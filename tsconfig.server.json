@@ -13,6 +13,7 @@
         "server.ts",
         "lib/**/*.ts",
         "services/**/*.ts",
-        "scripts/**/*.ts"
+        "scripts/**/*.ts",
+        "prisma/demoData.ts"
     ]
 }

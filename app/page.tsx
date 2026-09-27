@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { Panel, UrgencyBadge } from '@/components/Badges'
 import { Moves, eventTitle } from '@/components/Moves'
+import { useSocket } from '@/context/SocketContext'
 import { COIN_SYMBOL, date, dateTime, pct, usd } from '@/lib/format'
 
 type Position = {
@@ -25,6 +26,7 @@ type EventRow = {
     changePct: number
     moves?: unknown
     source: string
+    context?: { hypothetical?: boolean; demo?: boolean } | null
     occurredAt: string
     impact: { exposureUsd: number; impactUsd: number; impactPctOfTotal: number }
     insight: { id: string; status: string; urgency: string | null; headline: string | null } | null
@@ -50,6 +52,8 @@ type InvestorData = {
         cryptoReason: string
         timeHorizon: string
         dropComfortPct: number
+        alertEnabled: boolean
+        alertThresholdPct: number
         isDemo: boolean
         positions: Position[]
     }
@@ -58,6 +62,7 @@ type InvestorData = {
     events: EventRow[]
 }
 type InvestorSummary = { id: string; name: string; tagline: string; isDemo: boolean }
+type LiveAlert = { id: string; coinId: string; changePct: number; severity: string; occurredAt: string }
 
 const splitName = (name: string) => {
     const m = name.match(/^(.*?)\s*\((.*)\)$/)
@@ -90,11 +95,15 @@ function todayStatus(t: Today, tolerance: number) {
 
 export default function TodayPage() {
     const router = useRouter()
+    const { socket, isConnected } = useSocket()
     const [investors, setInvestors] = useState<InvestorSummary[]>([])
     const [selected, setSelected] = useState<string | null>(null)
     const [data, setData] = useState<InvestorData | null>(null)
     const [busy, setBusy] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [liveAlert, setLiveAlert] = useState<LiveAlert | null>(null)
+    const [notificationsEnabled, setNotificationsEnabled] = useState(false)
+    const [triggeringDemo, setTriggeringDemo] = useState(false)
 
     useEffect(() => {
         fetch('/api/investors').then(async (r) => r.ok && setInvestors(await r.json()))
@@ -113,6 +122,46 @@ export default function TodayPage() {
         setData(null)
         load()
     }, [selected, load])
+
+    useEffect(() => {
+        setNotificationsEnabled(typeof Notification !== 'undefined' && Notification.permission === 'granted')
+    }, [])
+
+    useEffect(() => {
+        if (!socket) return
+        const onAlert = (alert: LiveAlert) => {
+            setLiveAlert(alert)
+            void load()
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                const coin = COIN_NAME[alert.coinId] ?? alert.coinId
+                new Notification(`Crypto Pulse: ${coin} big move`, {
+                    body: `${coin} moved ${pct(alert.changePct, 1)}. Open Crypto Pulse to see the impact on your money.`,
+                    tag: alert.id,
+                })
+            }
+        }
+        socket.on('volatility-alert', onAlert)
+        return () => {
+            socket.off('volatility-alert', onAlert)
+        }
+    }, [socket, load])
+
+    async function enableNotifications() {
+        if (typeof Notification === 'undefined') return
+        const permission = await Notification.requestPermission()
+        setNotificationsEnabled(permission === 'granted')
+    }
+
+    async function triggerDemoCrash() {
+        setTriggeringDemo(true)
+        setError(null)
+        const res = await fetch('/api/events/demo', { method: 'POST' })
+        const body = await res.json()
+        setTriggeringDemo(false)
+        if (!res.ok) return setError(body.error ?? 'Could not trigger the demo crash')
+        setLiveAlert(body)
+        await load()
+    }
 
     async function explain(eventId: string) {
         if (!selected) return
@@ -164,6 +213,18 @@ export default function TodayPage() {
                 </div>
             )}
 
+            {liveAlert && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/40 bg-red-500/10 px-5 py-4" role="alert">
+                    <div>
+                        <p className="font-semibold text-red-300">Live big-move alert</p>
+                        <p className="text-sm">
+                            {COIN_NAME[liveAlert.coinId] ?? liveAlert.coinId} moved <span className="font-semibold tabular-nums">{pct(liveAlert.changePct, 1)}</span>. Your impact has been added below.
+                        </p>
+                    </div>
+                    <button onClick={() => setLiveAlert(null)} className="text-sm font-medium text-muted-foreground hover:text-foreground">Dismiss</button>
+                </div>
+            )}
+
             {!inv || !t ? (
                 <div className="text-muted-foreground">Loading…</div>
             ) : (
@@ -176,7 +237,21 @@ export default function TodayPage() {
 
                     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                         <div className="space-y-6 lg:col-span-2">
-                            <Panel title="Big moves" action={<span className="text-xs text-muted-foreground">What each one means for {who}</span>}>
+                            <Panel
+                                title="Big moves"
+                                action={
+                                    <span className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                        <span className={isConnected ? 'text-emerald-400' : 'text-amber-300'}>{isConnected ? '● Monitoring live' : '○ Reconnecting'}</span>
+                                        {!notificationsEnabled && typeof Notification !== 'undefined' && Notification.permission !== 'denied' && (
+                                            <button onClick={enableNotifications} className="font-medium text-primary hover:underline">Enable browser alerts</button>
+                                        )}
+                                        <button onClick={triggerDemoCrash} disabled={triggeringDemo} className="font-medium text-primary hover:underline disabled:opacity-50">
+                                            {triggeringDemo ? 'Triggering…' : 'Trigger demo crash'}
+                                        </button>
+                                        <span>What each one means for {who}</span>
+                                    </span>
+                                }
+                            >
                                 {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
                                 {[
                                     { title: 'Live', hint: 'Sharp moves of 3% or more, as they happen', events: data.events.filter((e) => e.source === 'live') },
@@ -217,6 +292,7 @@ export default function TodayPage() {
                                     {inv.cryptoReason && <Row label="Why crypto" value={inv.cryptoReason} />}
                                     <Row label="Needs the money" value={inv.timeHorizon} />
                                     <Row label="Crypto loss tolerance" value={`${inv.dropComfortPct}%`} />
+                                    <Row label="External alerts" value={inv.alertEnabled ? `At a ${inv.alertThresholdPct}% drop` : 'Off'} />
                                 </dl>
                             </Panel>
 
@@ -269,6 +345,7 @@ function MoveRow({ e, who, busy, disabled, onExplain }: { e: EventRow; who: stri
             <div className="min-w-0 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{eventTitle(e)}</span>
+                    {e.context?.hypothetical && <span className="rounded-full border border-violet-500/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300">Hypothetical demo</span>}
                     <span className="text-xs text-muted-foreground">{e.source === 'replay' ? date(e.occurredAt) : dateTime(e.occurredAt)}</span>
                 </div>
                 <Moves event={e} className="text-sm" />

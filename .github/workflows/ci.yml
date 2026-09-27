@@ -46,7 +46,6 @@ jobs:
         DATABASE_URL: "postgresql://user:password@localhost:5432/cryptopulse_test?schema=public"
         REDIS_URL: "redis://localhost:6379"
         ANTHROPIC_API_KEY: "test"
-        NEXT_PUBLIC_SITE_URL: "http://localhost:3000"
 
     - name: Build Custom Server
       run: npm run build:server

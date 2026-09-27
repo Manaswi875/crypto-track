@@ -1,5 +1,6 @@
 import redis from '@/lib/redis'
 import prisma from '@/lib/prisma'
+import { sendCrashAlerts } from './crashNotifier'
 
 const WINDOW_SIZE = 20 // Number of observations for rolling stats
 const STDEV_MULTIPLIER = 2.5 // k factor for anomaly detection
@@ -45,12 +46,26 @@ export class VolatilityDetector {
             console.warn(`[VOLATILITY] ${coinId} detected anomaly! Change: ${changePct.toFixed(2)}%`)
 
             // 5. Save Event
-            await prisma.volatilityEvent.create({
+            const event = await prisma.volatilityEvent.create({
                 data: {
                     coinId,
                     changePct,
                     severity: Math.abs(changePct) > 5 ? 'high' : 'medium'
                 }
+            })
+
+            await redis.publish('volatility-alerts', JSON.stringify({
+                id: event.id,
+                coinId: event.coinId,
+                changePct: event.changePct,
+                severity: event.severity,
+                occurredAt: event.occurredAt,
+            }))
+            await sendCrashAlerts({
+                id: event.id,
+                coinId: event.coinId,
+                changePct: event.changePct,
+                occurredAt: event.occurredAt,
             })
         }
     }

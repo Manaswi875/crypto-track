@@ -76,6 +76,8 @@ const Body = z.object({
     cryptoReason: z.string().trim().max(120).default(''),
     timeHorizon: z.string().trim().min(1).max(60),
     dropComfortPct: z.number().min(1).max(100),
+    alertEnabled: z.boolean(),
+    alertThresholdPct: z.number().min(3).max(20),
     crypto: z.array(CryptoHolding).min(1).max(20),
     cashUsd: z.number().min(0).max(1e10),
     investmentsUsd: z.number().min(0).max(1e10),
@@ -107,7 +109,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
     const parsed = Body.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid portfolio' }, { status: 400 })
-    const { goal, cryptoReason, timeHorizon, dropComfortPct } = parsed.data
+    const { goal, cryptoReason, timeHorizon, dropComfortPct, alertEnabled, alertThresholdPct } = parsed.data
     const positions = toPositions(parsed.data, await livePrices())
 
     // Insights quote these numbers, so clear them only if something they depend on changed
@@ -120,7 +122,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     await prisma.$transaction([
         prisma.position.deleteMany({ where: { investorId: investor.id } }),
         ...(changed ? [prisma.insight.deleteMany({ where: { investorId: investor.id } })] : []),
-        prisma.investor.update({ where: { id: investor.id }, data: { goal, cryptoReason, timeHorizon, dropComfortPct, positions: { create: positions } } }),
+        prisma.investor.update({ where: { id: investor.id }, data: { goal, cryptoReason, timeHorizon, dropComfortPct, alertEnabled, alertThresholdPct, positions: { create: positions } } }),
     ])
     return NextResponse.json({ ok: true, insightsCleared: changed })
 }

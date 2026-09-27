@@ -33,6 +33,8 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
+COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.server.json ./tsconfig.server.json
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 COPY --from=builder --chown=nextjs:nodejs /app/dist ./dist
@@ -43,5 +45,5 @@ USER nextjs
 
 EXPOSE 3000
 
-# Sync the database schema, then start the server
-CMD ["sh", "-c", "npx prisma db push --skip-generate && node dist/server.js"]
+# Sync the schema, load demo data (idempotent), then start the server
+CMD ["sh", "-c", "npx prisma db push --skip-generate && npx prisma db seed && node dist/server.js"]

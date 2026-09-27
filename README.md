@@ -51,6 +51,13 @@ The engine runs per portfolio: the same tools, prompt rules, and impact math wor
 5. Run the dev server: `npm run dev:server`, then open http://localhost:3000
 
 AI calls only happen when you ask for an insight, and each insight is cached per move and portfolio, so viewing it again is free. 
+
+### Crash alerts
+
+The server monitors prices continuously and sends external alerts only when a downward move crosses the threshold saved in the user's profile. The app suggests 5%, 7%, or 10% from their time horizon and loss tolerance, but the user can choose 3–20% or turn alerts off. Set `SLACK_WEBHOOK_URL` for Slack, or `RESEND_API_KEY`, `ALERT_EMAIL_FROM`, and `ALERT_EMAIL_TO` for email. Alert summaries use deterministic portfolio math and do not call the AI. `APP_URL` controls the link in each message.
+
+For the evaluation approach, mistakes found during development, and demo-safety workflow, see [How I Built Crypto Pulse with AI](BUILDING_WITH_AI.md).
+
 ### Production and Docker
 
 ```bash

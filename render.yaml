@@ -1,0 +1,39 @@
+# Render Blueprint: the app (Docker), Postgres, and Redis-compatible Key Value.
+# In Render: New > Blueprint > pick this repo, then set ANTHROPIC_API_KEY when prompted.
+services:
+  - type: web
+    name: crypto-pulse
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/markets/overview
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: crypto-pulse-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: crypto-pulse-cache
+          property: connectionString
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: ALERT_EMAIL_FROM
+        sync: false
+      - key: ALERT_EMAIL_TO
+        sync: false
+
+  - type: keyvalue
+    name: crypto-pulse-cache
+    plan: free
+    ipAllowList: []
+
+databases:
+  - name: crypto-pulse-db
+    plan: free

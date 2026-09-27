@@ -10,7 +10,8 @@
     "start": "next start",
     "start:server": "NODE_ENV=production node -r dotenv/config dist/server.js",
     "lint": "next lint",
-    "eval": "TS_NODE_PROJECT=tsconfig.server.json node -r dotenv/config -r ts-node/register -r tsconfig-paths/register scripts/eval-insights.ts"
+    "eval": "TS_NODE_PROJECT=tsconfig.server.json node -r dotenv/config -r ts-node/register -r tsconfig-paths/register scripts/eval-insights.ts",
+    "demo:reset": "TS_NODE_PROJECT=tsconfig.server.json node -r dotenv/config -r ts-node/register -r tsconfig-paths/register scripts/demo-reset.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
@@ -44,6 +45,6 @@
     "typescript": "^5.4.5"
   },
   "prisma": {
-    "seed": "ts-node prisma/seed.ts"
+    "seed": "ts-node --project tsconfig.server.json prisma/seed.ts"
   }
 }
