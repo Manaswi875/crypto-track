@@ -11,8 +11,9 @@ export const usd = (n: number, opts: { compact?: boolean; sign?: boolean } = {})
 
 export const pct = (n: number, digits = 2) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(digits)}%`
 
+// Calendar dates (crash days, client-since dates) are stored as UTC midnight, so format them in UTC
 export const date = (d: string | Date) =>
-    new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 
 export const dateTime = (d: string | Date) =>
     new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })

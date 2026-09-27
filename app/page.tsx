@@ -49,6 +49,48 @@ export default function MyPortfolio() {
     const [prices, setPrices] = useState<Record<string, { price: number; change24h: number }>>({})
     const [busy, setBusy] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
+
+    useEffect(() => {
+        fetch('/api/investors').then(async (r) => r.ok && setInvestors(await r.json()))
+        const fromUrl = new URLSearchParams(window.location.search).get('investor')
+        setSelected(fromUrl ?? 'you')
+    }, [])
+
+    const load = useCallback(async () => {
+        if (!selected) return
+        const res = await fetch(`/api/investors/${selected}`)
+        if (res.ok) setData(await res.json())
+    }, [selected])
+
+    useEffect(() => {
+        if (!selected) return
+        window.history.replaceState(null, '', `/?investor=${selected}`)
+        setData(null)
+        load()
+    }, [selected, load])
+
+    // Show prices straight away from cached market data; live ticks take over every 30s
+    useEffect(() => {
+        fetch('/api/markets/overview').then(async (r) => {
+            if (!r.ok) return
+            const coins: { id: string; price: number; change24h: number | null }[] = await r.json()
+            setPrices((prev) => ({
+                ...Object.fromEntries(coins.map((c) => [c.id, { price: c.price, change24h: c.change24h ?? 0 }])),
+                ...prev,
+            }))
+        })
+    }, [])
+
+    useEffect(() => {
+        if (!socket) return
+        socket.emit('subscribe', 'all-prices')
+        const onPrice = (p: { coinId: string; price: number; change24h: number }) => setPrices((prev) => ({ ...prev, [p.coinId]: p }))
+        socket.on('price-update', onPrice)
+        return () => {
+            socket.off('price-update', onPrice)
+        }
+    }, [socket])
+
     async function explain(eventId: string) {
         if (!selected) return
         setBusy(`explain:${eventId}`)
