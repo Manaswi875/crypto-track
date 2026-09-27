@@ -51,7 +51,7 @@ export default function BookMonitor() {
     async function replay(coinId: string) {
         setReplaying(coinId)
         setError(null)
-        const res = await fetch('/api/advisor/events/replay', {
+        const res = await fetch('/api/events/replay', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ coinId }),

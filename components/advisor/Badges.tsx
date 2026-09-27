@@ -6,6 +6,14 @@ const PRIORITY: Record<string, { label: string; className: string }> = {
     monitor: { label: 'Monitor', className: 'bg-slate-500/15 text-slate-300 border-slate-500/30' },
 }
 
+const URGENCY: Record<string, { label: string; className: string }> = {
+    check_in_today: { label: 'Worth a look today', className: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+    good_to_know: { label: 'Good to know', className: 'bg-sky-500/15 text-sky-300 border-sky-500/30' },
+    within_your_plan: { label: 'Within your plan', className: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
+}
+
+export const URGENCY_LABEL = Object.fromEntries(Object.entries(URGENCY).map(([k, v]) => [k, v.label]))
+
 const STATUS: Record<string, { label: string; className: string }> = {
     queued: { label: 'Queued', className: 'bg-slate-500/15 text-slate-300 border-slate-500/30' },
     generating: { label: 'Drafting…', className: 'bg-blue-500/15 text-blue-400 border-blue-500/30 animate-pulse' },
@@ -22,6 +30,11 @@ function Pill({ label, className }: { label: string; className: string }) {
 export function PriorityBadge({ priority }: { priority: string | null | undefined }) {
     if (!priority) return <span className="text-muted-foreground text-xs">—</span>
     return <Pill {...(PRIORITY[priority] ?? { label: priority, className: '' })} />
+}
+
+export function UrgencyBadge({ urgency }: { urgency: string | null | undefined }) {
+    if (!urgency) return null
+    return <Pill {...(URGENCY[urgency] ?? { label: urgency, className: '' })} />
 }
 
 export function StatusBadge({ status }: { status: string | null | undefined }) {
