@@ -4,7 +4,7 @@ import next from 'next'
 import { Server } from 'socket.io'
 import redis from './lib/redis'
 import { PriceTracker } from './services/priceTracker'
-import { WhaleWatcher } from './services/whaleWatcher'
+import { warmMarketCache } from './lib/coingecko'
 
 const dev = process.env.NODE_ENV !== 'production'
 const hostname = 'localhost'
@@ -28,10 +28,9 @@ app.prepare().then(() => {
 
     // Start Services
     const priceTracker = new PriceTracker()
-    const whaleWatcher = new WhaleWatcher()
 
     priceTracker.start()
-    whaleWatcher.start()
+    void warmMarketCache()
 
     // Socket.io Connection
     io.on('connection', (socket) => {
@@ -50,15 +49,13 @@ app.prepare().then(() => {
     // Proxy Redis events to WebSockets
     if (redis) {
         const subClient = redis.duplicate()
-        subClient.subscribe('price-updates', 'whale-events', 'notifications', 'agent-progress')
+        subClient.subscribe('price-updates', 'notifications', 'agent-progress')
 
         subClient.on('message', (channel, message) => {
             const data = JSON.parse(message)
 
             if (channel === 'price-updates') {
                 io.to(`coin:${data.coinId}`).to('all-prices').emit('price-update', data)
-            } else if (channel === 'whale-events') {
-                io.emit('whale-event', data)
             } else if (channel === 'agent-progress') {
                 io.emit('brief-update', data)
             } else if (channel === 'notifications') {
