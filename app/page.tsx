@@ -48,6 +48,7 @@ export default function MyPortfolio() {
     const [prices, setPrices] = useState<Record<string, { price: number; change24h: number }>>({})
     const [busy, setBusy] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [notice, setNotice] = useState<{ eventId: string; text: string } | null>(null)
 
     useEffect(() => {
         fetch('/api/investors').then(async (r) => r.ok && setInvestors(await r.json()))
@@ -87,8 +88,13 @@ export default function MyPortfolio() {
             body: JSON.stringify({ coinId }),
         })
         setBusy(null)
-        if (!res.ok) return setError((await res.json()).error ?? 'Replay failed')
-        load()
+        if (!res.ok) return setError('Could not load price history right now. Try again in a minute.')
+        const { event, created } = await res.json()
+        const text = created ? 'Added to your list.' : 'Already in your list.'
+        setNotice({ eventId: event.id, text })
+        setTimeout(() => setNotice((n) => (n?.eventId === event.id ? null : n)), 4000)
+        await load()
+        document.getElementById(`event-${event.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
 
     async function explain(eventId: string) {
@@ -216,6 +222,7 @@ export default function MyPortfolio() {
                                 </div>
 
                                 {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
+                                {notice && <p className="mb-3 text-sm text-emerald-400">{notice.text}</p>}
 
                                 {data.events.length === 0 ? (
                                     <p className="text-sm text-muted-foreground">No big moves yet. Replay one above; live moves of 1% or more also show up here.</p>
@@ -224,7 +231,11 @@ export default function MyPortfolio() {
                                         {data.events.map((e) => {
                                             const affected = e.impact.exposureUsd > 0
                                             return (
-                                                <li key={e.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                                <li
+                                                    key={e.id}
+                                                    id={`event-${e.id}`}
+                                                    className={`-mx-2 flex flex-col gap-3 rounded-md px-2 py-4 transition-colors duration-700 sm:flex-row sm:items-center sm:justify-between ${notice?.eventId === e.id ? 'bg-primary/10' : ''}`}
+                                                >
                                                     <div className="min-w-0">
                                                         <div className="flex flex-wrap items-center gap-2">
                                                             <span className="font-medium">{e.coin.name}</span>

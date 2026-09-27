@@ -59,7 +59,7 @@ export default function BookMonitor() {
             setError((await res.json()).error ?? 'Replay failed')
             return
         }
-        const event = await res.json()
+        const { event } = await res.json()
         window.location.href = `/advisor/events/${event.id}`
     }
 

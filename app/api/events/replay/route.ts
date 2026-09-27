@@ -9,8 +9,8 @@ export async function POST(req: Request) {
     if (!parsed.success) return NextResponse.json({ error: 'coinId must be bitcoin, ethereum or solana' }, { status: 400 })
 
     try {
-        const event = await createReplayEvent(parsed.data.coinId, 'user')
-        return NextResponse.json(event)
+        const result = await createReplayEvent(parsed.data.coinId, 'user')
+        return NextResponse.json(result, { status: result.created ? 201 : 200 })
     } catch (err) {
         return NextResponse.json({ error: err instanceof Error ? err.message : 'Replay failed' }, { status: 502 })
     }

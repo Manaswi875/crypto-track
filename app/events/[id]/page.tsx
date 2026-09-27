@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { SourceBadge, UrgencyBadge } from '@/components/advisor/Badges'
-import { date, dateTime, pct, usd } from '@/lib/format'
+import { date, dateTime, pct, price, usd } from '@/lib/format'
 
 type Row = {
     id: string
@@ -67,7 +67,7 @@ export default function Compare({ params }: { params: { id: string } }) {
                     <SourceBadge source={event.source} />
                 </div>
                 <p className="mt-1 text-muted-foreground">
-                    {event.startPrice && event.endPrice ? `${usd(event.startPrice)} → ${usd(event.endPrice)} · ` : ''}
+                    {event.startPrice && event.endPrice ? `${price(event.startPrice)} → ${price(event.endPrice)} · ` : ''}
                     {event.source === 'replay' ? date(event.occurredAt) : dateTime(event.occurredAt)} · Same move, different people, different meaning.
                 </p>
             </div>
