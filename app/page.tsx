@@ -291,7 +291,7 @@ export default function MyPortfolio() {
                                 <dl className="mt-3 space-y-2 text-sm">
                                     {inv.cryptoReason && <Row label="Why crypto" value={inv.cryptoReason} />}
                                     <Row label="Needs the money" value={inv.timeHorizon} />
-                                    <Row label="OK if crypto drops up to" value={`${inv.dropComfortPct}%`} />
+                                    <Row label="Crypto loss tolerance" value={`${inv.dropComfortPct}%`} />
                                 </dl>
                             </Panel>
 

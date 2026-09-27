@@ -46,10 +46,10 @@ Rules:
 - Every number you state must come from a tool result. Quote dollar and percentage figures exactly as returned by get_my_impact. Never calculate your own figures.
 - You only have data on this one asset's move. Do not claim how their other holdings or the wider market performed.
 - Use plain words for their holdings ("your Bitcoin fund", "your cash and savings"), not ticker symbols alone.
-- If the move is larger than the drop they said they are comfortable with, or they need the money soon, say so plainly and kindly. Suggest questions to reflect on, including whether to talk to a licensed financial adviser, but do not tell them what to do.
+- If the move exceeds their crypto loss tolerance, or they need the money soon, say so plainly and kindly. Suggest questions to reflect on, including whether to talk to a licensed financial adviser, but do not tell them what to do.
 - Urgency:
-  - check_in_today: the move is bigger than the drop they said they are comfortable with, or the loss is 5% or more of their total portfolio, or they need the money within about a year.
-  - within_your_plan: the move is within their stated comfort, the loss is small relative to their total, and they do not need the money for several years.
+  - check_in_today: the move exceeds their crypto loss tolerance, or the loss is 5% or more of their total portfolio, or they need the money within about a year.
+  - within_your_plan: the move is within their loss tolerance, the loss is small relative to their total, and they do not need the money for several years.
   - good_to_know: anything in between.
 - Keep it short. The whole insight should be readable in under a minute.
 
@@ -69,13 +69,13 @@ export async function runInsightAgent(eventId: string, investorId: string, onSte
 
     const tools = [
         ...agent.marketTools(event),
-        agent.tool('get_my_profile', "The investor's goal, why they own crypto, when they need the money, and how far they said their crypto could fall before they'd lose sleep.", z.object({}), () => ({
+        agent.tool('get_my_profile', "The investor's goal, why they own crypto, when they need the money, and their crypto loss tolerance (the largest drop they said they could sit through).", z.object({}), () => ({
             name: investor.name,
             age: investor.age,
             goal: investor.goal,
             why_they_own_crypto: investor.cryptoReason || 'not given',
             needs_the_money: investor.timeHorizon,
-            comfortable_with_crypto_drop_up_to_pct: investor.dropComfortPct,
+            crypto_loss_tolerance_pct: investor.dropComfortPct,
         })),
         agent.tool('get_my_positions', "Everything the investor holds: each crypto holding, plus their cash & savings and stocks & bonds, with values and share of the total, flagging what this move affects.", z.object({}), () => ({
             total_usd: impact.totalUsd,
@@ -89,14 +89,14 @@ export async function runInsightAgent(eventId: string, investorId: string, onSte
                     affected_by_this_move: p.coinId === event.coinId,
                 })),
         })),
-        agent.tool('get_my_impact', 'The pre-computed dollar impact of this move on the investor, and how the move compares with the drop they said they are comfortable with. Quote these numbers exactly.', z.object({}), () => ({
+        agent.tool('get_my_impact', 'The pre-computed dollar impact of this move on the investor, and how the move compares with their crypto loss tolerance. Quote these numbers exactly.', z.object({}), () => ({
             exposure_usd: impact.exposureUsd,
             exposure_pct_of_portfolio: impact.exposurePctOfTotal,
             estimated_impact_usd: impact.impactUsd,
             impact_pct_of_portfolio: impact.impactPctOfTotal,
             move_pct: Number(event.changePct.toFixed(2)),
-            comfortable_with_drop_up_to_pct: investor.dropComfortPct,
-            move_exceeds_stated_comfort: Math.abs(event.changePct) > investor.dropComfortPct,
+            crypto_loss_tolerance_pct: investor.dropComfortPct,
+            move_exceeds_loss_tolerance: Math.abs(event.changePct) > investor.dropComfortPct,
         })),
         betaZodTool({
             name: 'submit_insight',

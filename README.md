@@ -2,11 +2,11 @@
 
 **When crypto crashes, Crypto Pulse tells you what it means for your money and your plan, calmly, before you panic-sell.**
 
-Price apps tell you "BTC −14%". Crypto Pulse tells you: *"You're down $1,407, which is 2.8% of everything you have. That's within the 30% drop you said you were comfortable with, and you don't need this money for 5+ years."* It never tells you to buy or sell. It gives you context and keeps your own goal in view.
+Price apps tell you "BTC −14%". Crypto Pulse tells you: *"You're down $1,407, which is 2.8% of everything you have. That's within your 30% loss tolerance, and you don't need this money for 5+ years."* It never tells you to buy or sell. It gives you context and keeps your own goal in view.
 
 ## How it works
 
-1. **You set your goal while you're calm**: what the money is for, when you need it, and how far crypto could fall before you'd lose sleep. Then your crypto holdings in detail, plus rough amounts for your cash and your stocks & bonds.
+1. **You set your goal while you're calm**: what the money is for, when you need it, and your crypto loss tolerance (the largest drop you could sit through without selling). Then your crypto holdings in detail, plus rough amounts for your cash and your stocks & bonds.
 2. **A big move happens**: live (the price tracker flags moves of 1%+), or a replay of a real historical crash from CoinGecko data.
 3. **Your impact is computed in code**, not by the AI: exact dollars and share of your portfolio.
 4. **An AI agent writes your insight**: Claude uses tools to look up the move, your goal, your holdings, your computed impact, and longer-term price context, then writes what happened, what it means for you, how it relates to your goal, and questions worth asking yourself, with an urgency level.
