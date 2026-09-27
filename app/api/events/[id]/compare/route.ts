@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { portfolioImpact } from '@/lib/impact'
+import { eventMoves, portfolioImpact } from '@/lib/impact'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +17,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         event,
         investors: investors.map(({ positions, insights, ...i }) => ({
             ...i,
-            impact: portfolioImpact(positions, event.coinId, event.changePct),
+            impact: portfolioImpact(positions, eventMoves(event)),
             insight: insights[0] ?? null,
         })),
     })

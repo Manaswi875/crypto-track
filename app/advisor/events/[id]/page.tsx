@@ -1,10 +1,11 @@
 'use client'
 
 import Link from 'next/link'
+import { Moves, eventTitle } from '@/components/Moves'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSocket } from '@/context/SocketContext'
 import { Panel, PriorityBadge, SourceBadge, Stat, StatusBadge } from '@/components/advisor/Badges'
-import { date, dateTime, pct, price, usd } from '@/lib/format'
+import { date, dateTime, pct, usd } from '@/lib/format'
 
 type Impact = {
     householdId: string
@@ -25,6 +26,8 @@ type EventData = {
         id: string
         coin: { name: string; symbol: string }
         changePct: number
+        coinId: string
+        moves?: unknown
         source: string
         startPrice: number | null
         endPrice: number | null
@@ -106,15 +109,12 @@ export default function EventTriage({ params }: { params: { id: string } }) {
                 <Link href="/advisor" className="text-sm text-muted-foreground hover:text-foreground">← Book Monitor</Link>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                     <h2 className="text-3xl font-bold tracking-tight">
-                        {event.coin.name}{' '}
-                        <span className={event.changePct < 0 ? 'text-red-400' : 'text-emerald-400'}>{pct(event.changePct)}</span>
+                        {eventTitle(event)}
                     </h2>
                     <SourceBadge source={event.source} />
                 </div>
+                <Moves event={event} className="mt-2 text-lg" />
                 <p className="mt-1 text-muted-foreground">
-                    {event.startPrice && event.endPrice
-                        ? `${price(event.startPrice)} → ${price(event.endPrice)} over ${event.windowLabel ?? 'the window'}, `
-                        : ''}
                     {event.source === 'replay' ? `${date(event.occurredAt)} (applied to today's book)` : dateTime(event.occurredAt)}
                 </p>
                 {event.aiExplanation && <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{event.aiExplanation}</p>}
@@ -162,7 +162,7 @@ export default function EventTriage({ params }: { params: { id: string } }) {
             >
                 {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
                 {impacts.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No households hold {event.coin.name}.</p>
+                    <p className="text-sm text-muted-foreground">No households hold the coins that moved.</p>
                 ) : (
                     <div className="-mx-5 overflow-x-auto">
                         <table className="w-full text-sm">

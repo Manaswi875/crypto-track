@@ -59,6 +59,7 @@ model VolatilityEvent {
   endPrice      Float?
   windowLabel   String? // e.g. "24h", "10m"
   context       Json? // price context captured when the event was created
+  moves         Json? // every tracked coin's % move that day, e.g. {"bitcoin": -14.07, "ethereum": -14.91}
   occurredAt    DateTime  @default(now())
   briefs        Brief[]
   createdAt     DateTime  @default(now())
@@ -93,12 +94,12 @@ model PriceHistory {
 model Investor {
   id             String     @id
   name           String
-  tagline        String     // e.g. "Saving for a house"
+  tagline        String // e.g. "Saving for a house"
   age            Int?
-  goal           String     // short, e.g. "Buy our first home"
+  goal           String // short, e.g. "Buy our first home"
   cryptoReason   String     @default("") // why they own crypto, e.g. "A small long-term bet"
-  timeHorizon    String     // when they need the money, e.g. "Spring 2027"
-  dropComfortPct Float      // how far crypto could fall before they'd lose sleep
+  timeHorizon    String // when they need the money, e.g. "Spring 2027"
+  dropComfortPct Float // how far crypto could fall before they'd lose sleep
   isDemo         Boolean    @default(true)
   positions      Position[]
   insights       Insight[]
@@ -110,10 +111,10 @@ model Position {
   id          String   @id @default(cuid())
   investorId  String
   investor    Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
-  symbol      String   // fund ticker for crypto funds (IBIT), coin symbol when held directly, or CASH / INVEST
-  name        String   // plain-English label shown to the user
-  assetClass  String   // crypto_etf, crypto, cash, investments
-  coinId      String?  // underlying crypto exposure
+  symbol      String // fund ticker for crypto funds (IBIT), coin symbol when held directly, or CASH / INVEST
+  name        String // plain-English label shown to the user
+  assetClass  String // crypto_etf, crypto, cash, investments
+  coinId      String? // underlying crypto exposure
   marketValue Float
 
   @@index([investorId])

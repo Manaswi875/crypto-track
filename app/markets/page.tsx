@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { Moves, eventTitle, movesOf } from '@/components/Moves'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Area, AreaChart, CartesianGrid, ReferenceDot, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useSocket } from '@/context/SocketContext'
@@ -23,7 +24,7 @@ type Coin = {
     allTimeHighDate: string
 }
 type Point = { t: number; p: number }
-type MarketEvent = { id: string; coinId: string; coin: { name: string }; changePct: number; source: string; occurredAt: string }
+type MarketEvent = { id: string; coinId: string; coin: { name: string }; changePct: number; moves?: unknown; source: string; occurredAt: string }
 
 const RANGES = [
     { days: '1', label: '1D' },
@@ -95,7 +96,7 @@ export default function Markets() {
         if (!history || history.length === 0) return []
         const start = history[0].t
         return events
-            .filter((e) => e.coinId === coinId && new Date(e.occurredAt).getTime() >= start)
+            .filter((e) => movesOf(e)[coinId] != null && new Date(e.occurredAt).getTime() >= start)
             .map((e) => {
                 const ts = new Date(e.occurredAt).getTime()
                 const nearest = history.reduce((best, h) => (Math.abs(h.t - ts) < Math.abs(best.t - ts) ? h : best), history[0])
@@ -224,7 +225,8 @@ export default function Markets() {
                                     <li key={e.id} className="flex items-center justify-between gap-3 py-2.5">
                                         <div>
                                             <div className="text-sm font-medium">
-                                                {e.coin.name} <Change value={e.changePct} />
+                                                {eventTitle(e)}
+                                                <Moves event={e} className="mt-0.5 block text-xs" />
                                             </div>
                                             <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                                                 {e.source === 'replay' ? date(e.occurredAt) : dateTime(e.occurredAt)} <SourceBadge source={e.source} />

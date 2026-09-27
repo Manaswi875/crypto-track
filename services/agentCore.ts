@@ -3,6 +3,7 @@ import type { BetaRunnableTool } from '@anthropic-ai/sdk/lib/tools/BetaRunnableT
 import * as z from 'zod/v4'
 import prisma from '@/lib/prisma'
 import { FALLBACK_BETA, MODEL, costUsd, getAnthropic } from '@/lib/anthropic'
+import { eventMoves } from '@/lib/impact'
 
 /**
  * Shared agent engine. The personal insight agent and the advisor brief agent
@@ -23,8 +24,11 @@ export type MarketEvent = {
     occurredAt: Date
     source: string
     context: unknown
+    moves?: unknown
     coin: { name: string; symbol: string }
 }
+
+const COIN_NAME: Record<string, string> = { bitcoin: 'Bitcoin', ethereum: 'Ethereum', solana: 'Solana', cardano: 'Cardano', ripple: 'XRP' }
 
 export class AgentRun {
     readonly trace: TraceStep[] = []
@@ -56,17 +60,20 @@ export class AgentRun {
     /** Tools every agent gets: the market event and longer-term price context. */
     marketTools(event: MarketEvent) {
         return [
-            this.tool('get_market_event', 'Details of the market event: asset, % move, start/end price, time window, and whether it is live or a historical replay.', z.object({}), () => ({
-                asset: event.coin.name,
-                symbol: event.coin.symbol.toUpperCase(),
-                change_pct: Number(event.changePct.toFixed(2)),
-                start_price_usd: event.startPrice,
-                end_price_usd: event.endPrice,
+            this.tool('get_market_event', "Details of the market event: each coin's % move that day, the coin that fell most with its start/end price, the time window, and whether it is live or a historical replay.", z.object({}), () => ({
+                moves_pct: Object.fromEntries(Object.entries(eventMoves(event)).map(([coin, pct]) => [COIN_NAME[coin] ?? coin, Number(pct.toFixed(2))])),
+                fell_most: {
+                    asset: event.coin.name,
+                    symbol: event.coin.symbol.toUpperCase(),
+                    change_pct: Number(event.changePct.toFixed(2)),
+                    start_price_usd: event.startPrice,
+                    end_price_usd: event.endPrice,
+                },
                 window: event.windowLabel,
                 occurred_at: event.occurredAt.toISOString().slice(0, 10),
-                source: event.source === 'replay' ? 'historical replay (a real past move applied to the current portfolio)' : 'live',
+                source: event.source === 'replay' ? 'historical replay (a real past day applied to the current portfolio)' : 'live',
             })),
-            this.tool('get_price_context', 'Longer-term price context for the asset (change over 30/90 days, prior high and low), useful for putting the move in perspective.', z.object({}), async () => {
+            this.tool('get_price_context', 'Longer-term price context for the coin that fell most (change over 30/90 days, prior high and low), useful for putting the move in perspective.', z.object({}), async () => {
                 if (event.context) return event.context
                 const recent = await prisma.priceHistory.findMany({ where: { coinId: event.coinId }, orderBy: { timestamp: 'desc' }, take: 200 })
                 if (recent.length === 0) return { note: 'No price history available.' }

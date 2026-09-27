@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { Moves, eventTitle } from '@/components/Moves'
 import { useCallback, useEffect, useState } from 'react'
 import { Panel, PriorityBadge, StatusBadge } from '@/components/advisor/Badges'
 import { Trace, TraceStep } from '@/components/Trace'
@@ -30,7 +31,7 @@ type BriefData = {
         outputTokens: number | null
         latencyMs: number | null
         error: string | null
-        event: { coin: { name: string }; changePct: number; source: string; occurredAt: string }
+        event: { coinId: string; coin: { name: string }; changePct: number; moves?: unknown; source: string; occurredAt: string }
         household: {
             name: string
             primaryContact: string
@@ -97,7 +98,7 @@ export default function BriefReview({ params }: { params: { id: string } }) {
         <div className="space-y-6">
             <div>
                 <Link href={`/advisor/events/${brief.eventId}`} className="text-sm text-muted-foreground hover:text-foreground">
-                    ← {brief.event.coin.name} {pct(brief.event.changePct)} ({brief.event.source === 'replay' ? date(brief.event.occurredAt) : 'live'})
+                    ← {eventTitle(brief.event)} ({brief.event.source === 'replay' ? date(brief.event.occurredAt) : 'live'})
                 </Link>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                     <h2 className="text-3xl font-bold tracking-tight">{h.name}</h2>
@@ -106,7 +107,7 @@ export default function BriefReview({ params }: { params: { id: string } }) {
                 </div>
                 <p className="mt-1 text-muted-foreground">
                     Estimated impact <span className="font-medium text-red-400">{usd(brief.impactUsd)}</span> ({pct(brief.impactPctOfAum)} of portfolio) on{' '}
-                    {usd(brief.exposureUsd)} of {brief.event.coin.name} exposure
+                    {usd(brief.exposureUsd)} of exposure to the coins that moved
                 </p>
             </div>
 
