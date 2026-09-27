@@ -224,8 +224,8 @@ const INVESTORS: {
         ],
     },
     {
-        id: 'arjun',
-        name: 'Arjun',
+        id: 'rohan',
+        name: 'Rohan',
         tagline: 'Long-term crypto believer',
         age: 29,
         riskComfort: 'high',
