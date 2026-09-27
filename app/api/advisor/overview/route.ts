@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getDemoAdvisor } from '@/lib/advisor'
 import { hasAnthropicKey } from '@/lib/anthropic'
+import { ensureCrashEvents } from '@/services/replay'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +11,7 @@ export const dynamic = 'force-dynamic'
 const MANUAL_MINUTES_PER_HOUSEHOLD = 15
 
 export async function GET() {
+    await ensureCrashEvents()
     const advisor = await getDemoAdvisor()
     const households = await prisma.household.findMany({ include: { holdings: true } })
 
@@ -28,7 +30,7 @@ export async function GET() {
     const cryptoHouseholds = households.filter((h) => h.holdings.some((x) => x.coinId)).length
 
     const [replays, live] = await Promise.all([
-        prisma.volatilityEvent.findMany({ where: { source: 'replay' }, orderBy: { createdAt: 'desc' }, include: { coin: true, _count: { select: { briefs: true } } } }),
+        prisma.volatilityEvent.findMany({ where: { source: 'replay' }, orderBy: { occurredAt: 'desc' }, include: { coin: true, _count: { select: { briefs: true } } } }),
         prisma.volatilityEvent.findMany({ where: { source: 'live' }, orderBy: { createdAt: 'desc' }, take: 10, include: { coin: true, _count: { select: { briefs: true } } } }),
     ])
 

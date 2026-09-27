@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { useSocket } from '@/context/SocketContext'
-import { Panel, SourceBadge, UrgencyBadge } from '@/components/advisor/Badges'
+import { Panel, UrgencyBadge } from '@/components/advisor/Badges'
 import { Moves, eventTitle } from '@/components/Moves'
 import { COIN_SYMBOL, date, dateTime, pct, usd } from '@/lib/format'
 
@@ -38,7 +38,6 @@ type InvestorData = {
     events: EventRow[]
 }
 
-type CrashOption = { date: string; leadCoinId: string; moves: Record<string, number>; kind: string; eventId: string | null }
 const LIVE_COINS = ['bitcoin', 'ethereum', 'solana']
 
 export default function MyPortfolio() {
@@ -50,65 +49,6 @@ export default function MyPortfolio() {
     const [prices, setPrices] = useState<Record<string, { price: number; change24h: number }>>({})
     const [busy, setBusy] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
-    const [notice, setNotice] = useState<{ eventId: string; text: string } | null>(null)
-    const [crashes, setCrashes] = useState<CrashOption[] | null>(null)
-
-    const loadCrashes = useCallback(async () => {
-        const r = await fetch('/api/events/replay/options')
-        setCrashes(r.ok ? await r.json() : [])
-    }, [])
-
-    useEffect(() => {
-        loadCrashes()
-    }, [loadCrashes])
-
-    useEffect(() => {
-        fetch('/api/investors').then(async (r) => r.ok && setInvestors(await r.json()))
-        const fromUrl = new URLSearchParams(window.location.search).get('investor')
-        setSelected(fromUrl ?? 'you')
-    }, [])
-
-    const load = useCallback(async () => {
-        if (!selected) return
-        const res = await fetch(`/api/investors/${selected}`)
-        if (res.ok) setData(await res.json())
-    }, [selected])
-
-    useEffect(() => {
-        if (!selected) return
-        window.history.replaceState(null, '', `/?investor=${selected}`)
-        setData(null)
-        load()
-    }, [selected, load])
-
-    useEffect(() => {
-        if (!socket) return
-        socket.emit('subscribe', 'all-prices')
-        const onPrice = (p: { coinId: string; price: number; change24h: number }) => setPrices((prev) => ({ ...prev, [p.coinId]: p }))
-        socket.on('price-update', onPrice)
-        return () => {
-            socket.off('price-update', onPrice)
-        }
-    }, [socket])
-
-    async function replay(date: string) {
-        setBusy(`replay:${date}`)
-        setError(null)
-        const res = await fetch('/api/events/replay', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ date }),
-        })
-        setBusy(null)
-        if (!res.ok) return setError('Could not load price history right now. Try again in a minute.')
-        const { event, created } = await res.json()
-        const text = created ? 'Added to your list.' : 'Already in your list.'
-        setNotice({ eventId: event.id, text })
-        setTimeout(() => setNotice((n) => (n?.eventId === event.id ? null : n)), 4000)
-        await Promise.all([load(), loadCrashes()])
-        document.getElementById(`event-${event.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }
-
     async function explain(eventId: string) {
         if (!selected) return
         setBusy(`explain:${eventId}`)
@@ -214,70 +154,31 @@ export default function MyPortfolio() {
                     <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
                         <div className="space-y-6 lg:col-span-2">
                             <Panel title="Crypto moves" action={<span className="text-xs text-muted-foreground">What each move means for {inv.isDemo ? inv.name : 'you'}</span>}>
-                                <details className="group mb-5 rounded-lg border border-dashed p-4" open={data.events.length === 0}>
-                                    <summary className="cursor-pointer list-none text-sm font-medium">
-                                        Replay a real crash <span className="text-muted-foreground group-open:hidden">▸</span>
-                                        <span className="hidden text-muted-foreground group-open:inline">▾</span>
-                                    </summary>
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                        Real sell-offs from the past year of CoinGecko prices. Each applies every coin&apos;s actual move that day to this portfolio.
-                                    </p>
-                                    {!crashes ? (
-                                        <p className="mt-3 text-xs text-muted-foreground">Loading past crashes…</p>
-                                    ) : crashes.length === 0 ? (
-                                        <p className="mt-3 text-xs text-muted-foreground">Price history is unavailable right now. Try again in a minute.</p>
-                                    ) : (
-                                        <ul className="mt-3 divide-y">
-                                            {crashes.map((c) => (
-                                                <li key={c.date} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                                                    <div className="text-sm">
-                                                        <span className="font-medium">{date(c.date)}</span>{' '}
-                                                        <span className="text-muted-foreground">· {eventTitle({ coinId: c.leadCoinId, changePct: c.moves[c.leadCoinId], moves: c.moves })}</span>
-                                                        <div className="text-xs">
-                                                            <Moves event={{ coinId: c.leadCoinId, changePct: c.moves[c.leadCoinId], moves: c.moves }} />
-                                                        </div>
-                                                    </div>
-                                                    {c.eventId ? (
-                                                        <button
-                                                            onClick={() => document.getElementById(`event-${c.eventId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
-                                                            className="text-xs text-emerald-400 hover:underline"
-                                                        >
-                                                            ✓ In your list
-                                                        </button>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => replay(c.date)}
-                                                            disabled={busy !== null}
-                                                            className="rounded-md border bg-secondary px-3 py-1 text-xs font-medium hover:bg-secondary/70 disabled:opacity-50"
-                                                        >
-                                                            {busy === `replay:${c.date}` ? 'Adding…' : 'Replay'}
-                                                        </button>
-                                                    )}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    )}
-                                </details>
-
                                 {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
-                                {notice && <p className="mb-3 text-sm text-emerald-400">{notice.text}</p>}
 
                                 {data.events.length === 0 ? (
-                                    <p className="text-sm text-muted-foreground">No big moves yet. Replay one above; live moves of 1% or more also show up here.</p>
+                                    <p className="text-sm text-muted-foreground">Loading crashes… If this persists, price history is temporarily unavailable.</p>
                                 ) : (
-                                    <ul className="divide-y">
-                                        {data.events.map((e) => {
+                                    <>
+                                        {[
+                                            { title: 'Live moves', hint: 'Sharp moves of 3% or more, as they happen', events: data.events.filter((e) => e.source === 'live') },
+                                            { title: 'Past crashes', hint: 'Real sell-offs from the past year, applied to today’s holdings', events: data.events.filter((e) => e.source === 'replay') },
+                                        ]
+                                            .filter((g) => g.events.length > 0)
+                                            .map((g) => (
+                                                <div key={g.title} className="mb-4 last:mb-0">
+                                                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                                        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{g.title}</h4>
+                                                        <span className="text-xs text-muted-foreground">{g.hint}</span>
+                                                    </div>
+                                                    <ul className="divide-y">
+                                                        {g.events.map((e) => {
                                             const affected = e.impact.exposureUsd > 0
                                             return (
-                                                <li
-                                                    key={e.id}
-                                                    id={`event-${e.id}`}
-                                                    className={`-mx-2 flex flex-col gap-3 rounded-md px-2 py-4 transition-colors duration-700 sm:flex-row sm:items-center sm:justify-between ${notice?.eventId === e.id ? 'bg-primary/10' : ''}`}
-                                                >
+                                                <li key={e.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
                                                     <div className="min-w-0">
                                                         <div className="flex flex-wrap items-center gap-2">
                                                             <span className="font-medium">{eventTitle(e)}</span>
-                                                            <SourceBadge source={e.source} />
                                                             <span className="text-xs text-muted-foreground">{e.source === 'replay' ? date(e.occurredAt) : dateTime(e.occurredAt)}</span>
                                                         </div>
                                                         <Moves event={e} className="mt-1 text-sm" />
@@ -319,8 +220,11 @@ export default function MyPortfolio() {
                                                     </div>
                                                 </li>
                                             )
-                                        })}
-                                    </ul>
+                                                        })}
+                                                    </ul>
+                                                </div>
+                                            ))}
+                                    </>
                                 )}
                             </Panel>
                         </div>
