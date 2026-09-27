@@ -2,7 +2,7 @@ import type { TraceStep } from '@/services/agentCore'
 
 export type { TraceStep }
 
-const TOOL_LABEL: Record<string, string> = {
+export const TOOL_LABEL: Record<string, string> = {
     get_market_event: 'Looked up the market move',
     get_price_context: 'Checked longer-term price history',
     get_my_profile: 'Read your plan',

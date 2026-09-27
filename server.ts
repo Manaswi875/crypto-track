@@ -5,6 +5,7 @@ import { Server } from 'socket.io'
 import redis from './lib/redis'
 import { PriceTracker } from './services/priceTracker'
 import { warmMarketCache } from './lib/coingecko'
+import prisma from './lib/prisma'
 
 const dev = process.env.NODE_ENV !== 'production'
 const hostname = 'localhost'
@@ -25,6 +26,13 @@ app.prepare().then(() => {
             methods: ["GET", "POST"]
         }
     })
+
+    // AI runs happen in this process, so any still marked in progress were cut off by a restart
+    const interrupted = { status: 'failed', error: 'Interrupted by a server restart. Please retry.' }
+    void Promise.all([
+        prisma.insight.updateMany({ where: { status: 'generating' }, data: interrupted }),
+        prisma.brief.updateMany({ where: { status: { in: ['queued', 'generating'] } }, data: interrupted }),
+    ])
 
     // Start Services
     const priceTracker = new PriceTracker()

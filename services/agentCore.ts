@@ -30,6 +30,14 @@ export class AgentRun {
     readonly trace: TraceStep[] = []
     readonly started = Date.now()
 
+    /** onStep is called after every recorded step, e.g. to show live progress. */
+    constructor(private readonly onStep?: (trace: TraceStep[]) => void) {}
+
+    record(step: TraceStep) {
+        this.trace.push(step)
+        this.onStep?.(this.trace)
+    }
+
     /** A tool whose calls and outputs are recorded in the trace. */
     tool<T extends z.ZodType>(name: string, description: string, inputSchema: T, run: (input: z.infer<T>) => unknown): BetaRunnableTool<z.infer<T>> {
         return betaZodTool({
@@ -39,7 +47,7 @@ export class AgentRun {
             run: async (input) => {
                 const t0 = Date.now()
                 const output = await run(input)
-                this.trace.push({ type: 'tool_call', tool: name, output, ms: Date.now() - t0, atMs: t0 - this.started })
+                this.record({ type: 'tool_call', tool: name, output, ms: Date.now() - t0, atMs: t0 - this.started })
                 return typeof output === 'string' ? output : JSON.stringify(output)
             },
         })
@@ -101,10 +109,10 @@ export class AgentRun {
 
             for (const block of message.content) {
                 if (block.type === 'thinking' && block.thinking.trim()) {
-                    this.trace.push({ type: 'reasoning', text: block.thinking.trim(), atMs: Date.now() - this.started })
+                    this.record({ type: 'reasoning', text: block.thinking.trim(), atMs: Date.now() - this.started })
                 }
             }
-            this.trace.push({
+            this.record({
                 type: 'model_turn',
                 stopReason: message.stop_reason,
                 inputTokens: message.usage.input_tokens,
