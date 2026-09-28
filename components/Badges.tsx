@@ -14,7 +14,7 @@ export function UrgencyBadge({ urgency }: { urgency: string | null | undefined }
 
 export function Panel({ title, action, children, className }: { title?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
     return (
-        <section className={cn('rounded-xl border bg-card/50', className)}>
+        <section className={cn('interactive-surface rounded-xl border bg-card/50', className)}>
             {(title || action) && (
                 <div className="flex items-center justify-between gap-4 border-b px-5 py-3">
                     <h3 className="text-sm font-semibold">{title}</h3>

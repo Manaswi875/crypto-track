@@ -79,7 +79,7 @@ export function FollowUp({ insightId, selectableId, initial }: { insightId: stri
     )
 
     return (
-        <section className="rounded-xl border bg-card/50">
+        <section className="interactive-surface rounded-xl border bg-card/50">
             <div className="border-b px-5 py-3">
                 <h3 className="text-sm font-semibold">Ask a follow-up</h3>
                 <p className="text-xs text-muted-foreground">Or highlight any part of the insight above to ask about it.</p>

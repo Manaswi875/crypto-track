@@ -4,10 +4,11 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Area, AreaChart, CartesianGrid, ReferenceDot, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useSocket } from '@/context/SocketContext'
-import { Panel } from '@/components/Badges'
 import { Holding, HoldingMarketCard } from '@/components/HoldingMarketCard'
 import { movesOf } from '@/components/Moves'
+import { DEMO_CRASH_MOVES, DEMO_MARKET_CHANGE_PCT } from '@/lib/demoCrash'
 import { date, dateTime, pct, price, usd } from '@/lib/format'
+import { cryptoLossSnapshot } from '@/lib/personalAlerts'
 
 type CoinToday = {
     coinId: string
@@ -25,13 +26,13 @@ type CoinToday = {
 type Market = { change24hPct: number; coins: Record<string, CoinToday> }
 type Summary = { headline: string; happening: string[]; to_weigh: { coin: string; point: string }[]; generatedAt: string }
 type Mine = {
-    investor: { id: string; name: string; isDemo: boolean }
+    investor: { id: string; name: string; isDemo: boolean; goal: string; timeHorizon: string; dropComfortPct: number; alertEnabled: boolean; alertThresholdPct: number; alertSettings: { enabled: boolean; cryptoPortfolio: { enabled: boolean; thresholdPct: number }; currencies: { coinId: string; enabled: boolean; thresholdPct: number }[] }; totalWealthUsd: number }
     marketChange24hPct: number
     totals: { sellValueUsd: number; investedUsd: number | null; gainUsd: number | null; gainPct: number | null; missingInvested: number }
     holdings: Holding[]
 }
 type Point = { t: number; p: number }
-type MarketEvent = { id: string; coinId: string; changePct: number; moves?: unknown; occurredAt: string }
+type MarketEvent = { id: string; coinId: string; changePct: number; moves?: unknown; source: string; occurredAt: string }
 
 const RANGES = [
     { days: '1', label: '1D' },
@@ -66,9 +67,12 @@ export default function MarketInsights() {
     const [days, setDays] = useState<(typeof RANGES)[number]['days']>('30')
     const [history, setHistory] = useState<Point[] | null>(null)
     const [historyError, setHistoryError] = useState<string | null>(null)
+    const [viewMode, setViewMode] = useState<'live' | 'crash'>('live')
 
     useEffect(() => {
-        const investorId = new URLSearchParams(window.location.search).get('investor') ?? 'you'
+        const params = new URLSearchParams(window.location.search)
+        const investorId = params.get('investor') ?? 'you'
+        if (params.get('mode') === 'crash') setViewMode('crash')
         fetch('/api/markets/today').then(async (r) => (r.ok ? setMarket(await r.json()) : setError((await r.json()).error ?? 'Market data unavailable')))
         fetch('/api/markets/summary').then(async (r) => {
             if (!r.ok) return
@@ -113,15 +117,68 @@ export default function MarketInsights() {
         }
     }, [socket])
 
-    const coins = market ? Object.values(market.coins).sort((a, b) => b.marketCap - a.marketCap) : []
+    const displayedMarket = useMemo(() => {
+        if (!market || viewMode === 'live') return market
+        return {
+            change24hPct: DEMO_MARKET_CHANGE_PCT,
+            coins: Object.fromEntries(
+                Object.entries(market.coins).map(([id, coin]) => [id, {
+                    ...coin,
+                    price: coin.price * (1 + (DEMO_CRASH_MOVES[id] ?? -10) / 100),
+                    change24hPct: DEMO_CRASH_MOVES[id] ?? -10,
+                }]),
+            ),
+        }
+    }, [market, viewMode])
+    const coins = displayedMarket ? Object.values(displayedMarket.coins).sort((a, b) => b.marketCap - a.marketCap) : []
     const owned = new Set(mine?.holdings.map((h) => h.coinId) ?? [])
-    const selected = market?.coins[coinId]
+    const selected = displayedMarket?.coins[coinId]
+
+    const crashProfile = useMemo(() => {
+        if (!mine) return null
+        const holdings = mine.holdings.map((holding) => {
+            const move = DEMO_CRASH_MOVES[holding.coinId] ?? -10
+            const sellValueUsd = holding.sellValueUsd * (1 + move / 100)
+            const gainUsd = holding.investedUsd == null ? null : sellValueUsd - holding.investedUsd
+            return {
+                ...holding,
+                sellValueUsd,
+                gainUsd,
+                gainPct: gainUsd != null && holding.investedUsd ? (gainUsd / holding.investedUsd) * 100 : null,
+                coin: holding.coin ? { ...holding.coin, price: holding.coin.price * (1 + move / 100), change24hPct: move } : null,
+            }
+        })
+        const alertSnapshot = cryptoLossSnapshot(holdings.map((holding) => ({ coinId: holding.coinId, marketValue: holding.sellValueUsd, investedUsd: holding.investedUsd })))
+        const impactUsd = holdings.reduce((sum, holding, index) => sum + (holding.sellValueUsd - mine.holdings[index].sellValueUsd), 0)
+        const impactPctOfWealth = mine.investor.totalWealthUsd ? (impactUsd / mine.investor.totalWealthUsd) * 100 : 0
+        const currencyRulesCrossed = mine.investor.alertSettings.currencies.some((setting) => setting.enabled && (alertSnapshot.currencies.find((currency) => currency.coinId === setting.coinId)?.lossPct ?? 0) <= -setting.thresholdPct)
+        const portfolioRuleCrossed = alertSnapshot.complete && mine.investor.alertSettings.cryptoPortfolio.enabled && alertSnapshot.lossPct <= -mine.investor.alertSettings.cryptoPortfolio.thresholdPct
+        return {
+            holdings,
+            impactUsd,
+            impactPctOfWealth,
+            cryptoImpactPct: alertSnapshot.lossPct,
+            alertTriggered: mine.investor.alertSettings.enabled && (currencyRulesCrossed || portfolioRuleCrossed),
+            toleranceExceeded: Math.abs(impactPctOfWealth) > mine.investor.dropComfortPct,
+        }
+    }, [mine])
+
+    const displayedHistory = useMemo(() => {
+        if (!history || viewMode === 'live') return history
+        const crashMove = DEMO_CRASH_MOVES[coinId] ?? -10
+        const startIndex = Math.floor(history.length * 0.72)
+        return history.map((point, index) => {
+            if (index < startIndex) return point
+            const progress = (index - startIndex) / Math.max(history.length - 1 - startIndex, 1)
+            return { ...point, p: point.p * (1 + (crashMove / 100) * progress) }
+        })
+    }, [history, viewMode, coinId])
 
     const range = useMemo(() => {
-        if (!history || history.length < 2) return null
-        const prices = history.map((h) => h.p)
+        if (!displayedHistory || displayedHistory.length < 2) return null
+        const prices = displayedHistory.map((h) => h.p)
         return { change: ((prices[prices.length - 1] - prices[0]) / prices[0]) * 100, high: Math.max(...prices), low: Math.min(...prices) }
-    }, [history])
+    }, [displayedHistory])
 
     // Mark saved big moves that fall inside the visible range
     const markers = useMemo(() => {
@@ -141,15 +198,66 @@ export default function MarketInsights() {
 
     return (
         <div className="space-y-8">
-            <div>
-                <h2 className="text-3xl font-bold tracking-tight">Market Insights</h2>
-                <p className="text-muted-foreground">What&apos;s happening across crypto, and how the market looks for what you hold.</p>
+            <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                    <h2 className="text-3xl font-bold tracking-tight">Market Insights</h2>
+                    <p className="text-muted-foreground">{viewMode === 'live' ? 'What’s happening across crypto, and how the market looks for what you hold.' : 'A market-wide replay of the hypothetical crash.'}</p>
+                </div>
+                <div className="flex rounded-full border border-white/10 bg-white/[0.03] p-1" role="group" aria-label="Market view">
+                    <button onClick={() => setViewMode('live')} aria-pressed={viewMode === 'live'} className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${viewMode === 'live' ? 'bg-foreground text-background shadow-lg' : 'text-muted-foreground hover:text-foreground'}`}>Live market</button>
+                    <button onClick={() => setViewMode('crash')} aria-pressed={viewMode === 'crash'} className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${viewMode === 'crash' ? 'bg-red-400 text-red-950 shadow-[0_0_20px_rgba(248,113,113,0.2)]' : 'text-muted-foreground hover:text-foreground'}`}>Crash scenario</button>
+                </div>
             </div>
 
-            {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>}
+            {error && <div className="border-y border-red-500/30 py-3 text-sm text-red-300">{error}</div>}
+
+            {viewMode === 'crash' && (
+                <section className="relative py-10">
+                    <div className="relative z-10 max-w-3xl">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-red-300">Hypothetical market event</p>
+                        <h3 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">A sharp sell-off spreads across crypto.</h3>
+                        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">Bitcoin drops 12.4%, Ethereum 15.1%, and Solana 18.6%. The table and chart below show how a meaningful—but not record-setting—crypto crash would affect this portfolio.</p>
+                        <div className="mt-6 flex flex-wrap gap-6">
+                            {Object.entries(DEMO_CRASH_MOVES).map(([id, move]) => <div key={id}><span className="text-xs uppercase tracking-wider text-muted-foreground">{market?.coins[id]?.name ?? id}</span><strong className="block text-2xl font-semibold text-red-400">{pct(move, 1)}</strong></div>)}
+                        </div>
+                    </div>
+                </section>
+            )}
+
+            {viewMode === 'crash' && mine && crashProfile && (
+                <section className="border-y border-violet-400/20 py-8">
+                    <div className="flex flex-wrap items-start justify-between gap-5">
+                        <div className="max-w-2xl">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300">Impact for {mine.investor.isDemo ? mine.investor.name : 'you'}</p>
+                            <h3 className="mt-2 text-2xl font-semibold tracking-tight">This same crash changes meaning with the person.</h3>
+                            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                                With a goal of <span className="text-foreground">{mine.investor.goal}</span> and a <span className="text-foreground">{mine.investor.timeHorizon}</span> horizon, this portfolio would lose an estimated <span className="font-semibold text-red-400">{usd(crashProfile.impactUsd)}</span>. {crashProfile.toleranceExceeded ? 'The loss across total wealth exceeds this profile’s personal boundary.' : 'The whole-portfolio loss remains inside this profile’s personal boundary.'}
+                            </p>
+                        </div>
+                        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${crashProfile.alertTriggered ? 'border-red-400/40 bg-red-400/10 text-red-300' : 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'}`}>
+                            {crashProfile.alertTriggered ? 'Configured loss limit crossed · alert sent' : 'Monitored without interruption'}
+                        </span>
+                    </div>
+                    <div className="mt-6 grid grid-cols-2 border-y sm:grid-cols-4">
+                        <ScenarioFigure label="Total wealth" value={usd(mine.investor.totalWealthUsd)} />
+                        <ScenarioFigure label="Crypto before crash" value={usd(mine.totals.sellValueUsd)} />
+                        <ScenarioFigure label="Estimated loss" value={usd(crashProfile.impactUsd)} tone="red" />
+                        <ScenarioFigure label="Vs amount invested" value={pct(crashProfile.cryptoImpactPct, 2)} tone="red" />
+                    </div>
+                    <div className="mt-8 grid gap-7 lg:grid-cols-[0.7fr_1.3fr]">
+                        <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">Practical response</p><h4 className="mt-3 text-2xl font-semibold tracking-tight">Does the crash change the goal?</h4><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Goal: <span className="text-foreground">{mine.investor.goal}</span><br />Money needed: <span className="text-foreground">{mine.investor.timeHorizon}</span></p></div>
+                        <div className="border-t border-white/10 lg:border-t-0">
+                            <CrashResponseStep number="01" title="Translate the headline" detail={`The scenario reduces total wealth by ${pct(Math.abs(crashProfile.impactPctOfWealth), 2)}. That personal number matters more than the market-wide percentage.`} />
+                            <CrashResponseStep number="02" title="Check the boundary" detail={crashProfile.toleranceExceeded ? `The ${pct(Math.abs(crashProfile.impactPctOfWealth), 2)} whole-portfolio loss exceeds the ${pct(mine.investor.dropComfortPct, 0)} personal boundary. This is why the agent treats the crash as personally serious.` : `The ${pct(Math.abs(crashProfile.impactPctOfWealth), 2)} whole-portfolio loss remains inside the ${pct(mine.investor.dropComfortPct, 0)} personal boundary. The agent keeps monitoring without creating an unnecessary interruption.`} />
+                            <CrashResponseStep number="03" title="Check the plan, not the price" detail={`Confirm whether “${mine.investor.goal}” or the ${mine.investor.timeHorizon} timeline actually changed. If neither changed, record the impact and review again on the planned schedule instead of reacting to every tick.`} />
+                            <div className="border-t border-white/10 pt-5"><Link href={mine.investor.id === 'you' ? '/practice' : `/practice?investor=${encodeURIComponent(mine.investor.id)}`} className="group inline-flex items-center gap-4 text-sm font-semibold text-foreground"><span className="border-b border-white/25 pb-1 transition-colors group-hover:border-violet-300">Practice the response in Crash Lab</span><span className="text-violet-300 transition-transform group-hover:translate-x-2">→</span></Link></div>
+                        </div>
+                    </div>
+                </section>
+            )}
 
             {/* 1. AI read of the market */}
-            <Panel
+            {viewMode === 'live' ? <MarketSection
                 title="What's happening in crypto"
                 action={
                     summary && (
@@ -195,14 +303,21 @@ export default function MarketInsights() {
                     </div>
                 )}
                 {summaryError && <p className="mt-2 text-sm text-red-400">{summaryError}</p>}
-            </Panel>
+            </MarketSection> : (
+                <MarketSection title="What is happening in this scenario" action={<span className="text-xs font-medium text-red-300">SIMULATED · NOT LIVE</span>}>
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <div><p className="text-lg font-semibold">A broad risk-off move is hitting major crypto assets at the same time.</p><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Bitcoin leads the market lower, while higher-volatility assets fall further. Correlation rises during the sell-off, so diversification within crypto offers limited protection.</p></div>
+                        <div><h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">What the agent notices</h4><ul className="mt-2 space-y-2 text-sm"><li>• All monitored assets crossed their alert thresholds.</li><li>• Solana is moving most severely at −18.6%.</li><li>• Portfolio impact depends on each holding’s dollar exposure.</li></ul></div>
+                    </div>
+                </MarketSection>
+            )}
 
             {/* 2. All coins side by side */}
-            <Panel
+            <MarketSection
                 title="All coins today"
-                action={market && <span className="text-xs text-muted-foreground">Crypto market 24h: <Change v={market.change24hPct} /></span>}
+                action={displayedMarket && <span className="text-xs text-muted-foreground">{viewMode === 'crash' ? 'Simulated market' : 'Crypto market'} 24h: <Change v={displayedMarket.change24hPct} /></span>}
             >
-                {!market ? (
+                {!displayedMarket ? (
                     <p className="text-sm text-muted-foreground">Loading market data…</p>
                 ) : (
                     <div className="-mx-5 overflow-x-auto">
@@ -249,15 +364,15 @@ export default function MarketInsights() {
                         </table>
                     </div>
                 )}
-            </Panel>
+            </MarketSection>
 
             {/* 3. Price chart for the selected coin */}
-            <Panel
+            <MarketSection
                 title={selected ? `${selected.name} price` : 'Price'}
                 action={
-                    <div className="flex rounded-md border text-xs">
+                    <div className="flex border-b border-white/10 text-xs">
                         {RANGES.map((r) => (
-                            <button key={r.days} onClick={() => setDays(r.days)} className={`px-2.5 py-1 font-medium ${days === r.days ? 'bg-secondary' : 'text-muted-foreground'}`}>
+                            <button key={r.days} onClick={() => setDays(r.days)} className={`border-b-2 px-2.5 py-1 font-medium transition-colors ${days === r.days ? 'border-violet-300 text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
                                 {r.label}
                             </button>
                         ))}
@@ -283,11 +398,11 @@ export default function MarketInsights() {
                             {historyError}
                             <button onClick={loadHistory} className="rounded-md border px-3 py-1 text-xs hover:bg-secondary">Retry</button>
                         </div>
-                    ) : !history ? (
+                    ) : !displayedHistory ? (
                         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading chart…</div>
                     ) : (
                         <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={history} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                            <AreaChart data={displayedHistory} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                                 <defs>
                                     <linearGradient id="priceFill" x1="0" y1="0" x2="0" y2="1">
                                         <stop offset="0%" stopColor={color} stopOpacity={0.3} />
@@ -302,21 +417,22 @@ export default function MarketInsights() {
                                     labelFormatter={(t) => (days === '1' ? dateTime(new Date(Number(t))) : date(new Date(Number(t))))}
                                     formatter={(v) => [price(Number(v)), 'Price']}
                                 />
-                                <Area type="monotone" dataKey="p" stroke={color} strokeWidth={2} fill="url(#priceFill)" isAnimationActive={false} />
-                                {markers.map((m) => (
+                                <Area type="monotone" dataKey="p" stroke={viewMode === 'crash' ? '#f87171' : color} strokeWidth={2} fill="url(#priceFill)" isAnimationActive={viewMode === 'crash'} animationDuration={700} />
+                                {viewMode === 'live' && markers.map((m) => (
                                     <ReferenceDot key={m.id} x={m.point.t} y={m.point.p} r={5} fill="#fbbf24" stroke="hsl(var(--background))" strokeWidth={2} />
                                 ))}
                             </AreaChart>
                         </ResponsiveContainer>
                     )}
                 </div>
-                {markers.length > 0 && (
+                {viewMode === 'crash' && <p className="mt-2 text-xs font-medium text-red-300">Hypothetical price path for demonstration—not live market data.</p>}
+                {viewMode === 'live' && markers.length > 0 && (
                     <p className="mt-2 text-xs text-muted-foreground">
                         <span className="text-amber-400">●</span> Past crashes. See what they meant for you on{' '}
                         <Link href="/" className="text-primary hover:underline">My Portfolio</Link>.
                     </p>
                 )}
-            </Panel>
+            </MarketSection>
 
             {/* 4. The user's own holdings in this market */}
             {mine && (
@@ -327,11 +443,11 @@ export default function MarketInsights() {
                     </div>
                     {mine.totals.missingInvested > 0 && !mine.investor.isDemo && (
                         <p className="text-sm text-muted-foreground">
-                            Add what you put in to see your profit or loss. <Link href="/portfolio/edit" className="text-primary hover:underline">Edit your portfolio →</Link>
+                            Add what you put in to see your profit or loss. <Link href={`/portfolio/edit${mine.investor.id === 'you' ? '' : `?investor=${encodeURIComponent(mine.investor.id)}`}`} className="text-primary hover:underline">View the plan →</Link>
                         </p>
                     )}
-                    {mine.holdings.map((h) => (
-                        <HoldingMarketCard key={h.id} h={h} marketChange24hPct={mine.marketChange24hPct} />
+                    {(viewMode === 'crash' && crashProfile ? crashProfile.holdings : mine.holdings).map((h) => (
+                        <HoldingMarketCard key={h.id} h={h} marketChange24hPct={viewMode === 'crash' ? -13.8 : mine.marketChange24hPct} scenario={viewMode === 'crash'} />
                     ))}
                 </section>
             )}
@@ -339,4 +455,16 @@ export default function MarketInsights() {
             <p className="text-xs text-muted-foreground">Market data from CoinGecko.</p>
         </div>
     )
+}
+
+function ScenarioFigure({ label, value, tone }: { label: string; value: string; tone?: 'red' }) {
+    return <div className="border-b px-3 py-4 even:border-l sm:border-b-0 sm:border-l sm:first:border-l-0"><p className="text-xs text-muted-foreground">{label}</p><p className={`mt-1 text-xl font-semibold tabular-nums ${tone === 'red' ? 'text-red-400' : ''}`}>{value}</p></div>
+}
+
+function CrashResponseStep({ number, title, detail }: { number: string; title: string; detail: string }) {
+    return <div className="border-t border-white/10 py-5 first:border-t-0"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{number} · {title}</p><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{detail}</p></div>
+}
+
+function MarketSection({ title, action, children }: { title?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
+    return <section className="border-y border-white/10 py-7">{(title || action) && <div className="mb-6 flex flex-wrap items-end justify-between gap-4"><h3 className="text-xl font-semibold tracking-tight">{title}</h3>{action}</div>}<div>{children}</div></section>
 }

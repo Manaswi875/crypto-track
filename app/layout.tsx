@@ -1,9 +1,11 @@
 import { SocketProvider } from '@/context/SocketContext'
 import { AskDrawer } from '@/components/AskDrawer'
+import { ProfileBrand, ProfileNav } from '@/components/ProfileNav'
 import './globals.css'
-import { Inter } from 'next/font/google'
+import { Manrope } from 'next/font/google'
+import { Suspense } from 'react'
 
-const inter = Inter({ subsets: ['latin'] })
+const manrope = Manrope({ subsets: ['latin'] })
 
 export const metadata = {
   title: 'Crypto Pulse',
@@ -17,30 +19,25 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.className} bg-background text-foreground`}>
+      <body className={`${manrope.className} min-h-screen bg-background text-foreground antialiased`}>
         <SocketProvider>
-          <div className="min-h-screen flex flex-col">
-            <header className="border-b bg-card/50 backdrop-blur-md sticky top-0 z-50">
-              <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-                <a href="/" className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center font-bold text-primary-foreground">
-                    CP
-                  </div>
-                  <h1 className="text-xl font-bold tracking-tight">Crypto<span className="text-primary">Pulse</span></h1>
-                </a>
-                <nav className="hidden md:flex items-center gap-6">
-                  <a href="/" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Today</a>
-                  <a href="/markets" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Market Insights</a>
-                </nav>
+          <div className="relative min-h-screen flex flex-col overflow-x-hidden">
+            <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_15%_0%,rgba(124,58,237,0.10),transparent_28%),radial-gradient(circle_at_85%_20%,rgba(14,165,233,0.06),transparent_24%)]" />
+            <header className="sticky top-0 z-50 px-3 pt-3">
+              <div className="mx-auto flex h-14 max-w-6xl items-center justify-between rounded-full border border-white/10 bg-background/75 px-3 shadow-[0_12px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl sm:px-5">
+                <Suspense fallback={<div className="h-8 w-40" />}><ProfileBrand /></Suspense>
+                <Suspense fallback={<nav className="hidden items-center gap-1 md:flex" aria-label="Primary navigation" />}>
+                  <ProfileNav />
+                </Suspense>
                 <div className="flex items-center gap-4">
-                  <div className="px-3 py-1 bg-secondary rounded-full text-xs font-medium flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    Live
+                  <div className="flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-[11px] font-semibold text-emerald-300">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]"></span>
+                    <span className="hidden sm:inline">Agent monitoring</span><span className="sm:hidden">Live</span>
                   </div>
                 </div>
               </div>
             </header>
-            <main className="flex-1 container mx-auto px-4 py-8">
+            <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:py-12">
               {children}
             </main>
             <AskDrawer />

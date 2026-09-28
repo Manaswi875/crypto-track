@@ -1,6 +1,5 @@
 import redis from '@/lib/redis'
 import prisma from '@/lib/prisma'
-import { sendCrashAlerts } from './crashNotifier'
 
 const WINDOW_SIZE = 20 // Number of observations for rolling stats
 const STDEV_MULTIPLIER = 2.5 // k factor for anomaly detection
@@ -61,12 +60,6 @@ export class VolatilityDetector {
                 severity: event.severity,
                 occurredAt: event.occurredAt,
             }))
-            await sendCrashAlerts({
-                id: event.id,
-                coinId: event.coinId,
-                changePct: event.changePct,
-                occurredAt: event.occurredAt,
-            })
         }
     }
 }
