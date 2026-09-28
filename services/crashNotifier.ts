@@ -28,6 +28,7 @@ export type PersonalAlertMessage = {
 const COIN_NAME: Record<string, string> = { bitcoin: 'Bitcoin', ethereum: 'Ethereum', solana: 'Solana' }
 const money = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value)
 const percent = (value: number) => `${value < 0 ? '−' : '+'}${Math.abs(value).toFixed(1)}%`
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[character]!)
 
 export async function sendPersonalAlert(alert: PersonalAlertMessage) {
     const prefix = alert.hypothetical ? '[DEMO SIMULATION] ' : alert.paper ? '[PAPER PORTFOLIO] ' : ''
@@ -38,7 +39,9 @@ export async function sendPersonalAlert(alert: PersonalAlertMessage) {
             : []),
     ]
     const headline = `${prefix}Crypto Pulse: your investment loss limit was crossed`
-    const summary = `${reasons.join('. ')}. This alert compares live value with what you invested, not with yesterday's price.`
+    const reasonSummary = `${reasons.join('. ')}.`
+    const comparisonNote = "This alert compares live value with what you invested, not with yesterday's price."
+    const emailSummary = `${reasonSummary} ${comparisonNote}`
     const query = new URLSearchParams()
     if (alert.investorId !== 'you') query.set('investor', alert.investorId)
     if (alert.hypothetical) query.set('mode', 'crash')
@@ -48,8 +51,8 @@ export async function sendPersonalAlert(alert: PersonalAlertMessage) {
     const callToAction = alert.hypothetical ? 'Open demo simulation' : alert.paper ? 'Open Paper Portfolio' : 'Open Crypto Pulse'
 
     const deliveries: Promise<void>[] = []
-    if (process.env.SLACK_WEBHOOK_URL) deliveries.push(sendSlack(headline, summary, url, callToAction))
-    if (process.env.RESEND_API_KEY && process.env.ALERT_EMAIL_TO && process.env.ALERT_EMAIL_FROM) deliveries.push(sendEmail(headline, summary, url, callToAction))
+    if (process.env.SLACK_WEBHOOK_URL) deliveries.push(sendSlack(headline, reasonSummary, url, callToAction))
+    if (process.env.RESEND_API_KEY && process.env.ALERT_EMAIL_TO && process.env.ALERT_EMAIL_FROM) deliveries.push(sendEmail(headline, emailSummary, url, callToAction))
     await Promise.allSettled(deliveries)
 }
 
@@ -76,7 +79,7 @@ async function sendEmail(subject: string, summary: string, url: string, callToAc
             from: process.env.ALERT_EMAIL_FROM,
             to: [process.env.ALERT_EMAIL_TO],
             subject,
-            html: `<h2>${subject}</h2><p>${summary}</p><p><a href="${url}">${callToAction}</a></p>`,
+            html: `<h2>${escapeHtml(subject)}</h2><p>${escapeHtml(summary).replace(/\n/g, '<br>')}</p><p><a href="${escapeHtml(url)}">${escapeHtml(callToAction)}</a></p>`,
         }),
     })
     if (!response.ok) console.error(`Email crash alert failed (${response.status})`)

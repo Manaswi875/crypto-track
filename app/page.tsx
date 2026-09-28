@@ -102,11 +102,10 @@ function Signed({ v, children }: { v: number; children: React.ReactNode }) {
 }
 
 /**
- * A plain-English read of today, computed from the numbers (no AI needed):
- * how the biggest-moving held coin compares with a normal day, and where the
- * move sits against the investor's loss tolerance.
+ * A plain-English read of the investor's money, computed from the numbers.
+ * Personal dollar impact leads; market volatility is supporting context.
  */
-function todayStatus(t: Today, alertSettings: AlertSettings, positions: Position[]) {
+function todayStatus(t: Today, alertSettings: AlertSettings, positions: Position[], scenario: boolean) {
     const coins = Object.entries(t.coins)
     if (coins.length === 0) return { tone: 'calm' as const, text: 'You don’t hold any crypto yet.' }
     const snapshot = cryptoLossSnapshot(positions)
@@ -116,16 +115,25 @@ function todayStatus(t: Today, alertSettings: AlertSettings, positions: Position
         .find(([setting, holding]) => holding && holding.lossPct <= -setting.thresholdPct) : undefined
     if (crossedCurrency) {
         const [setting, holding] = crossedCurrency
-        return { tone: 'alert' as const, text: `${COIN_NAME[setting.coinId] ?? setting.coinId} is ${pct(holding!.lossPct, 1)} versus what you invested, crossing your ${setting.thresholdPct}% loss limit.` }
+        return { tone: 'alert' as const, text: `${COIN_NAME[setting.coinId] ?? setting.coinId} is now worth ${usd(holding!.currentValueUsd)} from ${usd(holding!.investedValueUsd)} invested—a ${usd(Math.abs(holding!.lossUsd))} loss (${pct(holding!.lossPct, 1)}). This crossed your ${setting.thresholdPct}% loss limit.` }
     }
-    if (alertSettings.enabled && alertSettings.cryptoPortfolio.enabled && snapshot.complete && snapshot.investedValueUsd > 0 && snapshot.lossPct <= -alertSettings.cryptoPortfolio.thresholdPct)
-        return { tone: 'alert' as const, text: `Your combined crypto holdings crossed the ${alertSettings.cryptoPortfolio.thresholdPct}% portfolio-loss limit.` }
+    if (alertSettings.enabled && alertSettings.cryptoPortfolio.enabled && snapshot.complete && snapshot.investedValueUsd > 0 && snapshot.lossPct <= -alertSettings.cryptoPortfolio.thresholdPct) {
+        return { tone: 'alert' as const, text: `Your crypto is now worth ${usd(snapshot.currentValueUsd)} from ${usd(snapshot.investedValueUsd)} invested—a ${usd(Math.abs(snapshot.lossUsd))} loss (${pct(snapshot.lossPct, 1)}). This crossed your ${alertSettings.cryptoPortfolio.thresholdPct}% combined-crypto limit.` }
+    }
     const [coinId, c] = coins.reduce((a, b) => (Math.abs(b[1].change24hPct) > Math.abs(a[1].change24hPct) ? b : a))
     const name = COIN_NAME[coinId] ?? coinId
     const move = `${name} ${pct(c.change24hPct, 1)}`
-    if (c.todayVsTypical >= 3) return { tone: 'watch' as const, text: `An unusually big move today: ${move}, against a typical day of about ±${c.typicalDailyMovePct.toFixed(1)}%.` }
-    if (c.todayVsTypical >= 1.5) return { tone: 'watch' as const, text: `A bigger move than usual: ${move}, against a typical day of about ±${c.typicalDailyMovePct.toFixed(1)}%. Still within your plan.` }
-    return { tone: 'calm' as const, text: `A normal day for your crypto: ${move}, well within a typical day of about ±${c.typicalDailyMovePct.toFixed(1)}%. Nothing needs your attention.` }
+    const period = scenario ? 'in this crash scenario' : 'today'
+    const action = t.change24hUsd < 0 ? 'lost' : t.change24hUsd > 0 ? 'gained' : 'did not move'
+    const personalMove = t.change24hUsd === 0
+        ? `Your crypto did not change ${period} and remains worth ${usd(t.cryptoUsd)}.`
+        : `Your crypto ${action} ${usd(Math.abs(t.change24hUsd))} ${period} (${pct(t.change24hPct, 1)}) and is now worth ${usd(t.cryptoUsd)}.`
+    const cumulative = t.investedUsd != null && t.gainUsd != null
+        ? ` Against ${usd(t.investedUsd)} invested, you are ${t.gainUsd < 0 ? `down ${usd(Math.abs(t.gainUsd))}` : t.gainUsd > 0 ? `up ${usd(t.gainUsd)}` : 'even'} overall.`
+        : ''
+    if (c.todayVsTypical >= 3) return { tone: 'watch' as const, text: `${personalMove}${cumulative} ${move} is an unusually large market move.` }
+    if (c.todayVsTypical >= 1.5) return { tone: 'watch' as const, text: `${personalMove}${cumulative} ${move} is larger than its typical daily move of about ±${c.typicalDailyMovePct.toFixed(1)}%.` }
+    return { tone: 'calm' as const, text: `${personalMove}${cumulative} ${move} is within its typical daily move of about ±${c.typicalDailyMovePct.toFixed(1)}%.` }
 }
 
 export default function TodayPage() {
@@ -447,7 +455,7 @@ function DemoStory({ name, goal, cryptoUsd, alertSettings, scenarioLossUsd, scen
 }
 
 function AgentStatus({ t, alertSettings, positions, heldCoins, isConnected, scenario }: { t: Today; alertSettings: AlertSettings; positions: Position[]; heldCoins: number; isConnected: boolean; scenario: boolean }) {
-    const status = todayStatus(t, alertSettings, positions)
+    const status = todayStatus(t, alertSettings, positions, scenario)
     const enabledCurrencyRules = alertSettings.currencies.filter((setting) => setting.enabled).length
     return (
         <section className="interactive-surface agent-strip flex flex-col gap-4 border-y px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
