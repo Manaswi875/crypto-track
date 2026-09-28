@@ -31,6 +31,7 @@ function EditPortfolio() {
     const draftRequested = investorId === 'you' && searchParams.get('draft') === '1'
     const [profileName, setProfileName] = useState('You')
     const [isDemo, setIsDemo] = useState(false)
+    const [paperMode, setPaperMode] = useState(false)
     const [goal, setGoal] = useState('')
     const [cryptoReason, setCryptoReason] = useState('')
     const [timeHorizon, setTimeHorizon] = useState('')
@@ -56,6 +57,7 @@ function EditPortfolio() {
             const positions: StoredPosition[] = investor.positions
             setProfileName(investor.name)
             setIsDemo(investor.isDemo)
+            setPaperMode(investor.portfolioMode === 'paper')
             setGoal(investor.goal)
             setCryptoReason(investor.cryptoReason ?? '')
             setTimeHorizon(investor.timeHorizon)
@@ -83,7 +85,7 @@ function EditPortfolio() {
             try {
                 if (draftRequested) d = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? 'null')
             } catch {}
-            if (d) {
+            if (d && investor.portfolioMode !== 'paper') {
                 setDraft(d)
                 if (d.goal) setGoal(d.goal)
                 if (d.cryptoReason) setCryptoReason(d.cryptoReason)
@@ -174,7 +176,7 @@ function EditPortfolio() {
                 <h2 className="mt-2 text-3xl font-bold tracking-tight">{isDemo ? `${profileName}'s plan` : 'Your goal and your money'}</h2>
                 <p className="text-muted-foreground">
                     {isDemo ? `See how ${profileName}'s goal, holdings, and loss limits shape the agent's response.` : 'Set this while you’re calm. When crypto crashes, the app measures the drop against it.'}{' '}
-                    {!isDemo && !draft && (
+                    {!isDemo && !draft && !paperMode && (
                         <Link href="/setup" className="text-primary hover:underline">
                             Or describe it in your own words →
                         </Link>
@@ -211,6 +213,13 @@ function EditPortfolio() {
             {isDemo && (
                 <div className="border-y border-violet-400/20 py-3 text-sm text-violet-200">
                     Demo profile · Read-only so this scenario stays repeatable.
+                </div>
+            )}
+
+            {paperMode && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-y border-violet-400/20 py-3 text-sm">
+                    <span className="text-muted-foreground"><strong className="text-violet-300">Paper portfolio active.</strong> Goals and alert limits stay editable here; simulated holdings change only when you place a paper trade.</span>
+                    <Link href="/paper" className="font-medium text-violet-300 hover:text-violet-200">Open Paper Portfolio →</Link>
                 </div>
             )}
 
@@ -288,6 +297,15 @@ function EditPortfolio() {
                 {alertEnabled && <p className="mt-4 text-xs text-muted-foreground">Suggested currency limit: {suggestedThreshold}%. {alertSuggestionReason(suggestedThreshold)} Each alert fires once when live value crosses below its investment boundary, then re-arms after recovery.</p>}
             </section>
 
+            {paperMode ? (
+                <section className="border-y border-white/10 py-7">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300">Simulated holdings</p>
+                    <div className="mt-4 divide-y divide-white/10 border-y border-white/10">
+                        {crypto.length ? crypto.map((holding) => <div key={holding.coinId} className="flex items-center justify-between py-4"><span className="font-medium">{COINS.find((coin) => coin.id === holding.coinId)?.label}</span><span className="text-right text-sm"><strong className="block">{usdText(holding.marketValue)}</strong><small className="text-muted-foreground">{usdText(holding.investedUsd ?? 0)} invested</small></span></div>) : <p className="py-5 text-sm text-muted-foreground">No simulated investments yet.</p>}
+                    </div>
+                    <Link href="/paper" className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-violet-300 hover:text-violet-200">Buy or sell with virtual cash <span>→</span></Link>
+                </section>
+            ) : <>
             <Panel title={isDemo ? `${profileName}'s crypto` : 'Your crypto'} action={<span className="text-xs text-muted-foreground">Amount invested determines profit or loss</span>}>
                 <div className="space-y-3">
                     {crypto.map((c, idx) => {
@@ -352,6 +370,7 @@ function EditPortfolio() {
                     </Field>
                 </div>
             </Panel>
+            </>}
             </fieldset>
 
             {error && <p className="text-sm text-red-400">{error}</p>}

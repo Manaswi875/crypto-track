@@ -11,34 +11,35 @@ datasource db {
 }
 
 model Coin {
-  id                String             @id
-  symbol            String             @unique
-  name              String
-  lastPrice         Float?
-  status            String             @default("active")
-  priceHistory      PriceHistory[]
-  volatilityEvents  VolatilityEvent[]
-  alertPreferences  CurrencyAlertPreference[]
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  id               String                    @id
+  symbol           String                    @unique
+  name             String
+  lastPrice        Float?
+  status           String                    @default("active")
+  priceHistory     PriceHistory[]
+  volatilityEvents VolatilityEvent[]
+  alertPreferences CurrencyAlertPreference[]
+  paperTrades      PaperTrade[]
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
 }
 
 model VolatilityEvent {
-  id            String    @id @default(cuid())
-  coinId        String
-  coin          Coin      @relation(fields: [coinId], references: [id])
-  changePct     Float
-  severity      String // low, medium, high
-  aiExplanation String?   @db.Text
-  source        String    @default("live") // live, replay
-  startPrice    Float?
-  endPrice      Float?
-  windowLabel   String? // e.g. "24h", "10m"
-  context       Json? // price context captured when the event was created
-  moves         Json? // every tracked coin's % move that day, e.g. {"bitcoin": -14.07, "ethereum": -14.91}
-  occurredAt    DateTime  @default(now())
-  createdAt     DateTime  @default(now())
-  Insight       Insight[]
+  id             String          @id @default(cuid())
+  coinId         String
+  coin           Coin            @relation(fields: [coinId], references: [id])
+  changePct      Float
+  severity       String // low, medium, high
+  aiExplanation  String?         @db.Text
+  source         String          @default("live") // live, replay
+  startPrice     Float?
+  endPrice       Float?
+  windowLabel    String? // e.g. "24h", "10m"
+  context        Json? // price context captured when the event was created
+  moves          Json? // every tracked coin's % move that day, e.g. {"bitcoin": -14.07, "ethereum": -14.91}
+  occurredAt     DateTime        @default(now())
+  createdAt      DateTime        @default(now())
+  Insight        Insight[]
   investorAlerts InvestorAlert[]
 }
 
@@ -56,57 +57,77 @@ model PriceHistory {
 // --- Personal investors: the core product ---
 
 model Investor {
-  id             String     @id
-  name           String
-  tagline        String // e.g. "Saving for a house"
-  age            Int?
-  goal           String // short, e.g. "Buy our first home"
-  cryptoReason   String     @default("") // why they own crypto, e.g. "A small long-term bet"
-  timeHorizon    String // when they need the money, e.g. "Spring 2027"
-  dropComfortPct Float // whole-portfolio loss boundary for goal planning and Crash Lab
-  alertEnabled   Boolean    @default(true)
-  alertThresholdPct Float   @default(7) // migration fallback: loss from amount invested
-  cryptoPortfolioAlertEnabled Boolean @default(true)
-  cryptoPortfolioAlertPct Float @default(5)
-  cryptoPortfolioAlertCrossed Boolean @default(false)
+  id                             String                    @id
+  name                           String
+  tagline                        String // e.g. "Saving for a house"
+  age                            Int?
+  goal                           String // short, e.g. "Buy our first home"
+  cryptoReason                   String                    @default("") // why they own crypto, e.g. "A small long-term bet"
+  timeHorizon                    String // when they need the money, e.g. "Spring 2027"
+  dropComfortPct                 Float // whole-portfolio loss boundary for goal planning and Crash Lab
+  alertEnabled                   Boolean                   @default(true)
+  alertThresholdPct              Float                     @default(7) // migration fallback: loss from amount invested
+  cryptoPortfolioAlertEnabled    Boolean                   @default(true)
+  cryptoPortfolioAlertPct        Float                     @default(5)
+  cryptoPortfolioAlertCrossed    Boolean                   @default(false)
   cryptoPortfolioLastTriggeredAt DateTime?
-  isDemo         Boolean    @default(true)
-  positions      Position[]
-  insights       Insight[]
-  currencyAlertPreferences CurrencyAlertPreference[]
-  alerts         InvestorAlert[]
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  isDemo                         Boolean                   @default(true)
+  portfolioMode                  String                    @default("manual") // manual, paper
+  paperStartingCashUsd           Float?
+  paperStartedAt                 DateTime?
+  positions                      Position[]
+  insights                       Insight[]
+  currencyAlertPreferences       CurrencyAlertPreference[]
+  alerts                         InvestorAlert[]
+  paperTrades                    PaperTrade[]
+  createdAt                      DateTime                  @default(now())
+  updatedAt                      DateTime                  @updatedAt
 }
 
-model CurrencyAlertPreference {
+model PaperTrade {
+  id             String   @id @default(cuid())
   investorId     String
   investor       Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
   coinId         String
-  coin           Coin @relation(fields: [coinId], references: [id], onDelete: Cascade)
-  enabled        Boolean @default(true)
-  thresholdPct   Float
-  isCrossed      Boolean @default(false)
-  lastTriggeredAt DateTime?
+  coin           Coin     @relation(fields: [coinId], references: [id])
+  side           String // buy, sell
+  units          Float
+  priceUsd       Float
+  valueUsd       Float
+  realizedPnlUsd Float?
   createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+
+  @@index([investorId, createdAt])
+}
+
+model CurrencyAlertPreference {
+  investorId      String
+  investor        Investor  @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  coinId          String
+  coin            Coin      @relation(fields: [coinId], references: [id], onDelete: Cascade)
+  enabled         Boolean   @default(true)
+  thresholdPct    Float
+  isCrossed       Boolean   @default(false)
+  lastTriggeredAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@id([investorId, coinId])
   @@index([coinId])
 }
 
 model InvestorAlert {
-  id                    String @id @default(cuid())
-  investorId            String
-  investor              Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
-  eventId               String
-  event                 VolatilityEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  triggerType           String
-  triggerDetails        Json
-  cryptoImpactUsd       Float
-  cryptoImpactPct       Float
-  hypothetical          Boolean @default(false)
-  occurredAt            DateTime @default(now())
+  id              String          @id @default(cuid())
+  investorId      String
+  investor        Investor        @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  eventId         String
+  event           VolatilityEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  triggerType     String
+  triggerDetails  Json
+  cryptoImpactUsd Float
+  cryptoImpactPct Float
+  hypothetical    Boolean         @default(false)
+  occurredAt      DateTime        @default(now())
 
   @@index([investorId, occurredAt])
   @@index([eventId])

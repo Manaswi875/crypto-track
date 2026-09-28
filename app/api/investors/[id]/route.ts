@@ -100,7 +100,7 @@ const Body = z.object({
     timeHorizon: z.string().trim().min(1).max(60),
     dropComfortPct: z.number().min(0.5).max(25),
     alertSettings: AlertSettings,
-    crypto: z.array(CryptoHolding).min(1).max(20),
+    crypto: z.array(CryptoHolding).max(20),
     cashUsd: z.number().min(0).max(1e10),
     investmentsUsd: z.number().min(0).max(1e10),
 })
@@ -132,19 +132,48 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const parsed = Body.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid portfolio' }, { status: 400 })
     const { goal, cryptoReason, timeHorizon, dropComfortPct, alertSettings } = parsed.data
-    const heldCoinIds = [...new Set(parsed.data.crypto.map((holding) => holding.coinId))]
-    const configuredCoinIds = alertSettings.currencies.map((setting) => setting.coinId)
+    const current = (await loadInvestor(investor.id))!
+    const paperMode = investor.portfolioMode === 'paper'
+    const heldCoinIds = [...new Set((paperMode ? current.positions.flatMap((position) => position.coinId ? [position.coinId] : []) : parsed.data.crypto.map((holding) => holding.coinId)))]
+    const configuredCoinIds: string[] = alertSettings.currencies.map((setting) => setting.coinId)
     if (new Set(configuredCoinIds).size !== configuredCoinIds.length || heldCoinIds.some((coinId) => !configuredCoinIds.includes(coinId)) || configuredCoinIds.some((coinId) => !heldCoinIds.includes(coinId))) {
         return NextResponse.json({ error: 'Alert settings must include each held currency exactly once.' }, { status: 400 })
     }
-    const positions = toPositions(parsed.data, await livePrices())
+    const positions = paperMode ? current.positions : toPositions(parsed.data, await livePrices())
 
     // Insights quote these numbers, so clear them only if something they depend on changed
     // Compare against what the user saw: live values, to the dollar
-    const current = (await loadInvestor(investor.id))!
     const fingerprint = (x: { goal: string; cryptoReason: string; timeHorizon: string; dropComfortPct: number; positions: { name: string; coinId: string | null; marketValue: number }[] }) =>
         JSON.stringify([x.goal, x.cryptoReason, x.timeHorizon, x.dropComfortPct, x.positions.map((p) => [p.name, p.coinId, Math.round(p.marketValue)]).sort()])
     const changed = fingerprint(current) !== fingerprint({ goal, cryptoReason, timeHorizon, dropComfortPct, positions })
+
+    if (paperMode) {
+        await prisma.$transaction(async (transaction) => {
+            if (changed) await transaction.insight.deleteMany({ where: { investorId: investor.id } })
+            await transaction.investor.update({
+                where: { id: investor.id },
+                data: {
+                    goal,
+                    cryptoReason,
+                    timeHorizon,
+                    dropComfortPct,
+                    alertEnabled: alertSettings.enabled,
+                    alertThresholdPct: alertSettings.currencies[0]?.thresholdPct ?? investor.alertThresholdPct,
+                    cryptoPortfolioAlertEnabled: alertSettings.cryptoPortfolio.enabled,
+                    cryptoPortfolioAlertPct: alertSettings.cryptoPortfolio.thresholdPct,
+                },
+            })
+            await transaction.currencyAlertPreference.deleteMany({ where: { investorId: investor.id, coinId: { notIn: heldCoinIds } } })
+            for (const setting of alertSettings.currencies) {
+                await transaction.currencyAlertPreference.upsert({
+                    where: { investorId_coinId: { investorId: investor.id, coinId: setting.coinId } },
+                    update: { enabled: setting.enabled, thresholdPct: setting.thresholdPct },
+                    create: { investorId: investor.id, coinId: setting.coinId, enabled: setting.enabled, thresholdPct: setting.thresholdPct },
+                })
+            }
+        })
+        return NextResponse.json({ ok: true, insightsCleared: changed })
+    }
 
     await prisma.$transaction([
         prisma.position.deleteMany({ where: { investorId: investor.id } }),
