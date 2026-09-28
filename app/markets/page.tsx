@@ -244,15 +244,6 @@ export default function MarketInsights() {
                         <ScenarioFigure label="Estimated loss" value={usd(crashProfile.impactUsd)} tone="red" />
                         <ScenarioFigure label="Vs amount invested" value={pct(crashProfile.cryptoImpactPct, 2)} tone="red" />
                     </div>
-                    <div className="mt-8 grid gap-7 lg:grid-cols-[0.7fr_1.3fr]">
-                        <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">Practical response</p><h4 className="mt-3 text-2xl font-semibold tracking-tight">Does the crash change the goal?</h4><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Goal: <span className="text-foreground">{mine.investor.goal}</span><br />Money needed: <span className="text-foreground">{mine.investor.timeHorizon}</span></p></div>
-                        <div className="border-t border-white/10 lg:border-t-0">
-                            <CrashResponseStep number="01" title="Translate the headline" detail={`The scenario reduces total wealth by ${pct(Math.abs(crashProfile.impactPctOfWealth), 2)}. That personal number matters more than the market-wide percentage.`} />
-                            <CrashResponseStep number="02" title="Check the boundary" detail={crashProfile.toleranceExceeded ? `The ${pct(Math.abs(crashProfile.impactPctOfWealth), 2)} whole-portfolio loss exceeds the ${pct(mine.investor.dropComfortPct, 0)} personal boundary. This is why the agent treats the crash as personally serious.` : `The ${pct(Math.abs(crashProfile.impactPctOfWealth), 2)} whole-portfolio loss remains inside the ${pct(mine.investor.dropComfortPct, 0)} personal boundary. The agent keeps monitoring without creating an unnecessary interruption.`} />
-                            <CrashResponseStep number="03" title="Check the plan, not the price" detail={`Confirm whether “${mine.investor.goal}” or the ${mine.investor.timeHorizon} timeline actually changed. If neither changed, record the impact and review again on the planned schedule instead of reacting to every tick.`} />
-                            <div className="border-t border-white/10 pt-5"><Link href={mine.investor.id === 'you' ? '/practice' : `/practice?investor=${encodeURIComponent(mine.investor.id)}`} className="group inline-flex items-center gap-4 text-sm font-semibold text-foreground"><span className="border-b border-white/25 pb-1 transition-colors group-hover:border-violet-300">Practice the response in Crash Lab</span><span className="text-violet-300 transition-transform group-hover:translate-x-2">→</span></Link></div>
-                        </div>
-                    </div>
                 </section>
             )}
 
@@ -458,10 +449,6 @@ export default function MarketInsights() {
 
 function ScenarioFigure({ label, value, tone }: { label: string; value: string; tone?: 'red' }) {
     return <div className="border-b px-3 py-4 even:border-l sm:border-b-0 sm:border-l sm:first:border-l-0"><p className="text-xs text-muted-foreground">{label}</p><p className={`mt-1 text-xl font-semibold tabular-nums ${tone === 'red' ? 'text-red-400' : ''}`}>{value}</p></div>
-}
-
-function CrashResponseStep({ number, title, detail }: { number: string; title: string; detail: string }) {
-    return <div className="border-t border-white/10 py-5 first:border-t-0"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{number} · {title}</p><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{detail}</p></div>
 }
 
 function MarketSection({ title, action, children }: { title?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
