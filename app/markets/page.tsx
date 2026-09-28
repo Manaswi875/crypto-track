@@ -140,12 +140,33 @@ export default function MarketInsights() {
             const move = DEMO_CRASH_MOVES[holding.coinId] ?? -10
             const sellValueUsd = holding.sellValueUsd * (1 + move / 100)
             const gainUsd = holding.investedUsd == null ? null : sellValueUsd - holding.investedUsd
+            const scenarioPrice = holding.coin ? holding.coin.price * (1 + move / 100) : null
+            const scenarioHistory = holding.coin ? [...holding.coin.last30Days] : []
+            if (scenarioPrice != null && scenarioHistory.length) scenarioHistory[scenarioHistory.length - 1] = scenarioPrice
+            const scenario30dPct = scenarioHistory.length > 1 && scenarioHistory[0]
+                ? ((scenarioHistory[scenarioHistory.length - 1] - scenarioHistory[0]) / scenarioHistory[0]) * 100
+                : null
             return {
                 ...holding,
                 sellValueUsd,
                 gainUsd,
                 gainPct: gainUsd != null && holding.investedUsd ? (gainUsd / holding.investedUsd) * 100 : null,
-                coin: holding.coin ? { ...holding.coin, price: holding.coin.price * (1 + move / 100), change24hPct: move } : null,
+                coin: holding.coin ? {
+                    ...holding.coin,
+                    price: scenarioPrice!,
+                    change24hPct: move,
+                    change30dPct: scenario30dPct,
+                    todayVsTypical: holding.coin.typicalDailyMovePct
+                        ? Math.abs(move) / holding.coin.typicalDailyMovePct
+                        : 0,
+                    vsYearAvgPct: holding.coin.yearAvg
+                        ? ((scenarioPrice! - holding.coin.yearAvg) / holding.coin.yearAvg) * 100
+                        : 0,
+                    positionInYearRange: holding.coin.yearHigh > holding.coin.yearLow
+                        ? Math.min(1, Math.max(0, (scenarioPrice! - holding.coin.yearLow) / (holding.coin.yearHigh - holding.coin.yearLow)))
+                        : 0.5,
+                    last30Days: scenarioHistory,
+                } : null,
             }
         })
         const alertSnapshot = cryptoLossSnapshot(holdings.map((holding) => ({ coinId: holding.coinId, marketValue: holding.sellValueUsd, investedUsd: holding.investedUsd })))
