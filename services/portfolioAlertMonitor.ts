@@ -96,6 +96,7 @@ export class PortfolioAlertMonitor {
             hypothetical: options.hypothetical === true,
             demo: options.hypothetical === true,
             triggerType,
+            paper: investor.portfolioMode === 'paper',
         } as Prisma.InputJsonValue
 
         const result = await prisma.$transaction(async (transaction) => {
@@ -149,6 +150,7 @@ export class PortfolioAlertMonitor {
             cryptoImpactUsd: snapshot.lossUsd,
             cryptoImpactPct: snapshot.lossPct,
             hypothetical: options.hypothetical,
+            paper: investor.portfolioMode === 'paper',
         }
         const socketPayload = {
             id: result.event.id,
@@ -164,6 +166,7 @@ export class PortfolioAlertMonitor {
             cryptoImpactUsd: snapshot.lossUsd,
             cryptoImpactPct: snapshot.lossPct,
             hypothetical: options.hypothetical === true,
+            paper: investor.portfolioMode === 'paper',
             headline: currencyTriggers.length
                 ? `${currencyTriggers.map((trigger) => COIN_NAME[trigger.coinId] ?? trigger.coinId).join(' and ')} crossed your loss limit`
                 : 'Your crypto portfolio crossed its loss limit',

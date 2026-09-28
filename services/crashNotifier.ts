@@ -22,6 +22,7 @@ export type PersonalAlertMessage = {
     cryptoImpactUsd: number
     cryptoImpactPct: number
     hypothetical?: boolean
+    paper?: boolean
 }
 
 const COIN_NAME: Record<string, string> = { bitcoin: 'Bitcoin', ethereum: 'Ethereum', solana: 'Solana' }
@@ -29,7 +30,7 @@ const money = (value: number) => new Intl.NumberFormat('en-US', { style: 'curren
 const percent = (value: number) => `${value < 0 ? '−' : '+'}${Math.abs(value).toFixed(1)}%`
 
 export async function sendPersonalAlert(alert: PersonalAlertMessage) {
-    const prefix = alert.hypothetical ? '[DEMO SIMULATION] ' : ''
+    const prefix = alert.hypothetical ? '[DEMO SIMULATION] ' : alert.paper ? '[PAPER PORTFOLIO] ' : ''
     const reasons = [
         ...alert.currencyTriggers.map((trigger) => `${COIN_NAME[trigger.coinId] ?? trigger.coinId} is worth ${money(trigger.currentValueUsd)} versus ${money(trigger.investedValueUsd)} invested—a ${money(Math.abs(trigger.lossUsd))} loss (${percent(trigger.lossPct)}), crossing your ${trigger.thresholdPct}% limit`),
         ...(alert.portfolioTrigger
@@ -42,8 +43,9 @@ export async function sendPersonalAlert(alert: PersonalAlertMessage) {
     if (alert.investorId !== 'you') query.set('investor', alert.investorId)
     if (alert.hypothetical) query.set('mode', 'crash')
     const queryString = query.toString()
-    const url = `${(process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '')}/${queryString ? `?${queryString}` : ''}`
-    const callToAction = alert.hypothetical ? 'Open demo simulation' : 'Open Crypto Pulse'
+    const baseUrl = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '')
+    const url = alert.paper ? `${baseUrl}/paper` : `${baseUrl}/${queryString ? `?${queryString}` : ''}`
+    const callToAction = alert.hypothetical ? 'Open demo simulation' : alert.paper ? 'Open Paper Portfolio' : 'Open Crypto Pulse'
 
     const deliveries: Promise<void>[] = []
     if (process.env.SLACK_WEBHOOK_URL) deliveries.push(sendSlack(headline, summary, url, callToAction))

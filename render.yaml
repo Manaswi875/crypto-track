@@ -5,7 +5,7 @@ services:
     name: crypto-pulse
     runtime: docker
     plan: free
-    healthCheckPath: /api/markets/overview
+    healthCheckPath: /api/health
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -19,7 +19,10 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: APP_URL
-        sync: false
+        fromService:
+          type: web
+          name: crypto-pulse
+          envVarKey: RENDER_EXTERNAL_URL
       - key: SLACK_WEBHOOK_URL
         sync: false
       - key: RESEND_API_KEY

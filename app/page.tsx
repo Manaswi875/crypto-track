@@ -40,7 +40,7 @@ type EventRow = {
     changePct: number
     moves?: unknown
     source: string
-    context?: { hypothetical?: boolean; demo?: boolean } | null
+    context?: { hypothetical?: boolean; demo?: boolean; paper?: boolean } | null
     occurredAt: string
     impact: { exposureUsd: number; impactUsd: number; impactPctOfTotal: number }
     insight: { id: string; status: string; urgency: string | null; headline: string | null } | null
@@ -71,6 +71,7 @@ type InvestorData = {
         alertThresholdPct: number
         alertSettings: AlertSettings
         isDemo: boolean
+        portfolioMode: string
         positions: Position[]
     }
     aiEnabled: boolean
@@ -92,6 +93,7 @@ type LiveAlert = {
     cryptoImpactUsd: number
     cryptoImpactPct: number
     hypothetical: boolean
+    paper?: boolean
 }
 
 const COIN_NAME: Record<string, string> = { bitcoin: 'Bitcoin', ethereum: 'Ethereum', solana: 'Solana' }
@@ -178,7 +180,7 @@ export default function TodayPage() {
             setLiveAlert(alert)
             void load()
             if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-                new Notification(alert.hypothetical ? `[DEMO] ${alert.headline}` : alert.headline, {
+                new Notification(alert.hypothetical ? `[DEMO] ${alert.headline}` : alert.paper ? `[PAPER] ${alert.headline}` : alert.headline, {
                     body: `Your crypto is ${pct(alert.cryptoImpactPct, 1)} (${usd(alert.cryptoImpactUsd)}) versus what you invested.`,
                     tag: alert.id,
                 })
@@ -234,6 +236,8 @@ export default function TodayPage() {
     const scenarioPositions = inv ? inv.positions.map((position) => ({
         ...position,
         marketValue: position.coinId ? position.marketValue * (1 + (DEMO_CRASH_MOVES[position.coinId] ?? 0) / 100) : position.marketValue,
+        change24hUsd: position.coinId ? position.marketValue * ((DEMO_CRASH_MOVES[position.coinId] ?? 0) / 100) : position.change24hUsd,
+        change24hPct: position.coinId ? DEMO_CRASH_MOVES[position.coinId] ?? position.change24hPct : position.change24hPct,
     })) : null
     const demoSnapshot = scenarioPositions ? cryptoLossSnapshot(scenarioPositions) : null
     const scenarioCryptoUsd = scenarioPositions?.filter((position) => position.coinId).reduce((sum, position) => sum + position.marketValue, 0) ?? 0
@@ -288,6 +292,13 @@ export default function TodayPage() {
                         Example investor: <span className="font-medium text-foreground">{inv.name}{inv.age ? `, ${inv.age}` : ''}</span> · {inv.tagline}
                     </span>
                     <button onClick={() => setSelected('you')} className="font-medium text-primary hover:underline">← Back to your portfolio</button>
+                </div>
+            )}
+
+            {inv && !inv.isDemo && inv.portfolioMode === 'paper' && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-y border-violet-400/15 py-3 text-sm">
+                    <span className="text-muted-foreground"><strong className="text-violet-300">Paper portfolio</strong> · Every value is simulated with virtual money and live market prices.</span>
+                    <Link href="/paper" className="font-medium text-violet-300 hover:text-violet-200">Trade virtual crypto →</Link>
                 </div>
             )}
 
@@ -353,7 +364,7 @@ export default function TodayPage() {
                         scenario={viewMode === 'crash'}
                     />
 
-                    <MoneySnapshot t={viewMode === 'crash' && scenarioToday ? scenarioToday : t} investorId={inv.id} scenario={viewMode === 'crash'} />
+                    <MoneySnapshot t={viewMode === 'crash' && scenarioToday ? scenarioToday : t} positions={viewMode === 'crash' && scenarioPositions ? scenarioPositions : inv.positions} investorId={inv.id} scenario={viewMode === 'crash'} />
 
                     {viewMode === 'crash' && activeEvent && <CrashImpact event={activeEvent} totalUsd={t.totalUsd} />}
 
@@ -456,17 +467,17 @@ function AgentStatus({ t, alertSettings, positions, heldCoins, isConnected, scen
     )
 }
 
-function MoneySnapshot({ t, investorId, scenario }: { t: Today; investorId: string; scenario: boolean }) {
+function MoneySnapshot({ t, positions, investorId, scenario }: { t: Today; positions: Position[]; investorId: string; scenario: boolean }) {
     const marketsHref = scenario
         ? `/markets?mode=crash${investorId === 'you' ? '' : `&investor=${investorId}`}`
         : `/markets${investorId === 'you' ? '' : `?investor=${investorId}`}#yours`
     return (
-        <section className="interactive-surface px-4 py-4 sm:px-5">
-            <div className="mb-4 flex items-end justify-between gap-3">
+        <section className="py-8">
+            <div className="mb-5 flex items-end justify-between gap-3">
                 <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{scenario ? 'Simulation · your money after the crash' : 'Your money today'}</p><h3 className="mt-1 text-xl font-semibold">{scenario ? 'What this scenario would do' : 'Your money in perspective'}</h3></div>
                 <Link href={marketsHref} className="text-xs font-medium text-primary hover:underline">Explore the market →</Link>
             </div>
-            <div className="grid grid-cols-2 border-y sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-x-8 gap-y-6 border-y py-6 sm:grid-cols-4">
                 <Figure label={scenario ? 'Everything after crash' : 'Everything you have'} value={usd(t.totalUsd)} />
                 <Figure label={scenario ? 'Crypto after crash' : 'Your crypto'} value={usd(t.cryptoUsd)} hint={t.totalUsd ? `${((t.cryptoUsd / t.totalUsd) * 100).toFixed(0)}% of everything` : undefined} />
                 <Figure
@@ -485,8 +496,58 @@ function MoneySnapshot({ t, investorId, scenario }: { t: Today; investorId: stri
                     hint={t.investedUsd != null && t.gainUsd != null ? `on ${usd(t.investedUsd)} put in` : 'Add what you put in'}
                 />
             </div>
+            <CryptoBreakdown positions={positions} scenario={scenario} />
         </section>
     )
+}
+
+function CryptoBreakdown({ positions, scenario }: { positions: Position[]; scenario: boolean }) {
+    const holdings = Object.values(positions.filter((position) => position.coinId).reduce<Record<string, {
+        coinId: string
+        valueUsd: number
+        investedUsd: number
+        hasCompleteCost: boolean
+        changeUsd: number
+    }>>((grouped, position) => {
+        const coinId = position.coinId as string
+        const current = grouped[coinId] ?? { coinId, valueUsd: 0, investedUsd: 0, hasCompleteCost: true, changeUsd: 0 }
+        current.valueUsd += position.marketValue
+        current.changeUsd += position.change24hUsd
+        if (position.investedUsd == null) current.hasCompleteCost = false
+        else current.investedUsd += position.investedUsd
+        grouped[coinId] = current
+        return grouped
+    }, {}))
+
+    if (holdings.length === 0) return null
+
+    return (
+        <div className="mt-8">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+                <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">By currency</p><h4 className="mt-1 text-lg font-semibold">Every investment, explained</h4></div>
+                <p className="text-xs text-muted-foreground">{scenario ? 'Crash impact compared with today' : 'Today means the latest 24-hour move'}</p>
+            </div>
+            <div className="mt-4 divide-y divide-white/10 border-y border-white/10">
+                {holdings.map((holding) => {
+                    const cumulativeUsd = holding.hasCompleteCost ? holding.valueUsd - holding.investedUsd : null
+                    const cumulativePct = cumulativeUsd != null && holding.investedUsd ? (cumulativeUsd / holding.investedUsd) * 100 : null
+                    return (
+                        <div key={holding.coinId} className="group grid gap-x-5 gap-y-4 py-5 transition-transform duration-300 hover:translate-x-2 sm:grid-cols-[1.1fr_repeat(4,minmax(0,1fr))] sm:items-center">
+                            <div><strong className="block text-lg">{COIN_NAME[holding.coinId] ?? holding.coinId}</strong><span className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{COIN_SYMBOL[holding.coinId] ?? holding.coinId}</span></div>
+                            <div><small className="block text-muted-foreground">Current value</small><strong className="tabular-nums">{usd(holding.valueUsd)}</strong></div>
+                            <div><small className="block text-muted-foreground">Amount invested</small><strong className="tabular-nums">{holding.hasCompleteCost ? usd(holding.investedUsd) : 'Not added'}</strong></div>
+                            <div><small className="block text-muted-foreground">{scenario ? 'Crash impact' : 'Today'}</small><strong className={signedClassName(holding.changeUsd)}>{usd(holding.changeUsd, { sign: true })}</strong></div>
+                            <div><small className="block text-muted-foreground">Cumulative profit / loss</small>{cumulativeUsd == null ? <strong>—</strong> : <strong className={signedClassName(cumulativeUsd)}>{usd(cumulativeUsd, { sign: true })} <span className="text-xs">{pct(cumulativePct ?? 0, 2)}</span></strong>}</div>
+                        </div>
+                    )
+                })}
+            </div>
+        </div>
+    )
+}
+
+function signedClassName(value: number) {
+    return `tabular-nums ${value < 0 ? 'text-red-400' : value > 0 ? 'text-emerald-400' : 'text-foreground'}`
 }
 
 function CrashImpact({ event, totalUsd }: { event: EventRow; totalUsd: number }) {
@@ -520,6 +581,7 @@ function MoveRow({ e, who, investorId, busy, disabled, onExplain }: { e: EventRo
                 <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{eventTitle(e)}</span>
                     {e.context?.hypothetical && <span className="rounded-full border border-violet-500/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300">Hypothetical demo</span>}
+                    {e.context?.paper && <span className="rounded-full border border-sky-400/30 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-300">Paper portfolio</span>}
                     <span className="text-xs text-muted-foreground">{e.source === 'replay' ? date(e.occurredAt) : dateTime(e.occurredAt)}</span>
                 </div>
                 <Moves event={e} className="text-sm" />
@@ -573,7 +635,7 @@ function MoveRow({ e, who, investorId, busy, disabled, onExplain }: { e: EventRo
 
 function Figure({ label, value, hint }: { label: string; value: React.ReactNode; hint?: React.ReactNode }) {
     return (
-        <div className="metric-figure group relative overflow-hidden border-b px-3 py-5 transition-all duration-300 even:border-l hover:bg-white/[0.035] sm:border-b-0 sm:border-l sm:first:border-l-0">
+        <div className="metric-figure group relative overflow-hidden transition-all duration-300 hover:-translate-y-1">
             <span className="absolute inset-x-0 bottom-0 h-px origin-left scale-x-0 bg-gradient-to-r from-violet-400 via-fuchsia-400 to-transparent transition-transform duration-500 group-hover:scale-x-100" />
             <div className="text-xs text-muted-foreground">{label}</div>
             <div className="mt-0.5 text-xl font-semibold tabular-nums transition-transform duration-300 group-hover:-translate-y-0.5">{value}</div>

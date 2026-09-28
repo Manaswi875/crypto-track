@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from 'react'
 
 type Turn = { role: 'user' | 'assistant'; content: string }
+type SelectionPrompt = { text: string; top: number; left: number }
+type PanelAnchor = { top: number; left: number }
+type Presentation = 'sidebar' | 'floating'
 
 const SUGGESTIONS = ['How am I doing overall?', 'Which of my holdings is riskiest?', 'What if Bitcoin fell 30%?', 'How did my coins do after past crashes?']
 
@@ -15,15 +18,19 @@ export function AskDrawer() {
     const [thread, setThread] = useState<Turn[]>([])
     const [question, setQuestion] = useState('')
     const [pending, setPending] = useState<{ question: string; answer: string } | null>(null)
+    const [selectionPrompt, setSelectionPrompt] = useState<SelectionPrompt | null>(null)
+    const [panelAnchor, setPanelAnchor] = useState<PanelAnchor | null>(null)
+    const [presentation, setPresentation] = useState<Presentation>('sidebar')
     const endRef = useRef<HTMLDivElement>(null)
 
-    // Follow whichever investor the page is showing; the thread persists for the session
+    // Follow whichever investor the page is showing; the thread persists in this browser
     useEffect(() => {
         if (!open) return
         const id = new URLSearchParams(window.location.search).get('investor') ?? 'you'
         setInvestorId(id)
         try {
-            setThread(JSON.parse(sessionStorage.getItem(storeKey(id)) ?? '[]'))
+            const saved = localStorage.getItem(storeKey(id)) ?? sessionStorage.getItem(storeKey(id)) ?? '[]'
+            setThread(JSON.parse(saved))
         } catch {
             setThread([])
         }
@@ -38,12 +45,68 @@ export function AskDrawer() {
             const question = (event as CustomEvent<{ question?: string }>).detail?.question
             const id = new URLSearchParams(window.location.search).get('investor') ?? 'you'
             setInvestorId(id)
+            setPanelAnchor(null)
+            setPresentation('sidebar')
             setOpen(true)
             if (question) setQuestion(question)
         }
         window.addEventListener('open-ask-pulse', openWithQuestion)
         return () => window.removeEventListener('open-ask-pulse', openWithQuestion)
     }, [])
+
+    useEffect(() => {
+        const readSelection = () => {
+            window.setTimeout(() => {
+                const selection = window.getSelection()
+                const text = selection?.toString().replace(/\s+/g, ' ').trim() ?? ''
+                if (!selection || selection.rangeCount === 0 || text.length < 2) return setSelectionPrompt(null)
+
+                const anchor = selection.anchorNode instanceof Element ? selection.anchorNode : selection.anchorNode?.parentElement
+                if (!anchor || anchor.closest('input, textarea, select, button, [contenteditable="true"], [data-no-highlight-ask]')) return setSelectionPrompt(null)
+                const insightBody = document.getElementById('insight-body')
+                if (insightBody?.contains(selection.anchorNode)) return setSelectionPrompt(null)
+
+                const rect = selection.getRangeAt(0).getBoundingClientRect()
+                if (!rect.width && !rect.height) return setSelectionPrompt(null)
+                setSelectionPrompt({
+                    text: text.slice(0, 360),
+                    top: Math.min(window.innerHeight - 56, rect.bottom + 10),
+                    left: Math.min(window.innerWidth - 105, Math.max(105, rect.left + rect.width / 2)),
+                })
+            }, 0)
+        }
+        const dismiss = () => setSelectionPrompt(null)
+        const onKeyUp = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') dismiss()
+            else if (event.shiftKey || event.key.startsWith('Arrow')) readSelection()
+        }
+        document.addEventListener('pointerup', readSelection)
+        document.addEventListener('keyup', onKeyUp)
+        window.addEventListener('scroll', dismiss, true)
+        window.addEventListener('resize', dismiss)
+        return () => {
+            document.removeEventListener('pointerup', readSelection)
+            document.removeEventListener('keyup', onKeyUp)
+            window.removeEventListener('scroll', dismiss, true)
+            window.removeEventListener('resize', dismiss)
+        }
+    }, [])
+
+    function askAboutSelection() {
+        if (!selectionPrompt) return
+        const id = new URLSearchParams(window.location.search).get('investor') ?? 'you'
+        const panelHeight = 520
+        const roomBelow = window.innerHeight - selectionPrompt.top
+        const top = roomBelow > panelHeight + 28 ? selectionPrompt.top + 42 : Math.max(80, selectionPrompt.top - panelHeight - 18)
+        const left = Math.min(window.innerWidth - 232, Math.max(232, selectionPrompt.left))
+        setInvestorId(id)
+        setQuestion(`What does this mean for my money? “${selectionPrompt.text}”`)
+        setPanelAnchor(window.innerWidth >= 640 ? { top, left } : null)
+        setPresentation('floating')
+        setOpen(true)
+        setSelectionPrompt(null)
+        window.getSelection()?.removeAllRanges()
+    }
 
     async function ask(q: string) {
         const text = q.trim()
@@ -72,23 +135,36 @@ export function AskDrawer() {
         setThread(next)
         setPending(null)
         try {
-            sessionStorage.setItem(storeKey(investorId), JSON.stringify(next))
+            localStorage.setItem(storeKey(investorId), JSON.stringify(next))
+            sessionStorage.removeItem(storeKey(investorId))
         } catch {}
     }
 
     function clear() {
         setThread([])
         try {
+            localStorage.removeItem(storeKey(investorId))
             sessionStorage.removeItem(storeKey(investorId))
         } catch {}
     }
 
     return (
         <>
+            {selectionPrompt && !open && (
+                <div style={{ position: 'fixed', top: selectionPrompt.top, left: selectionPrompt.left, transform: 'translateX(-50%)' }} className="z-[70]">
+                    <button
+                        onPointerDown={(event) => event.preventDefault()}
+                        onClick={askAboutSelection}
+                        className="mode-enter flex items-center gap-2 rounded-full bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white shadow-[0_14px_34px_rgba(30,41,59,0.28)] transition-transform hover:-translate-y-0.5"
+                    >
+                        <span className="text-violet-300">✦</span> Ask Pulse about this
+                    </button>
+                </div>
+            )}
             {!open && (
                 <button
-                    onClick={() => setOpen(true)}
-                    className="group fixed bottom-5 right-5 z-40 flex items-center gap-3 rounded-full border border-violet-300/20 bg-slate-950/90 py-2 pl-2 pr-4 text-sm font-semibold text-white shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl transition-transform hover:scale-[1.03]"
+                    onClick={() => { setPanelAnchor(null); setPresentation('sidebar'); setOpen(true) }}
+                    className="group fixed bottom-5 right-5 z-40 flex items-center gap-3 rounded-full border border-violet-300/20 bg-white/90 py-2 pl-2 pr-4 text-sm font-semibold text-slate-900 shadow-[0_18px_50px_rgba(79,70,229,0.22)] backdrop-blur-xl transition-transform hover:-translate-y-1 hover:scale-[1.03]"
                 >
                     <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet-400 to-fuchsia-400 text-slate-950 shadow-[0_0_20px_rgba(192,132,252,0.35)]">✦</span>
                     <span>Ask Crypto Pulse</span>
@@ -98,13 +174,21 @@ export function AskDrawer() {
 
             {open && (
                 <>
-                <button onClick={() => setOpen(false)} className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm" aria-label="Close Crypto Pulse assistant" />
-                <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-white/10 bg-slate-950/95 shadow-[-24px_0_80px_rgba(0,0,0,0.5)] backdrop-blur-2xl" role="dialog" aria-modal="true" aria-label="Ask Crypto Pulse">
+                {presentation === 'sidebar' && <button onClick={() => setOpen(false)} className="fixed inset-0 z-40 bg-slate-900/15 backdrop-blur-[2px]" aria-label="Close Crypto Pulse assistant" />}
+                <aside
+                    data-no-highlight-ask
+                    style={presentation === 'floating' && panelAnchor ? { top: panelAnchor.top, left: panelAnchor.left, translate: '-50% 0' } : undefined}
+                    className={presentation === 'sidebar'
+                        ? 'fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-violet-200/70 bg-white/95 shadow-[-24px_0_80px_rgba(79,70,229,0.18)] backdrop-blur-2xl'
+                        : `mode-enter fixed z-[60] flex max-h-[min(70vh,620px)] w-[calc(100vw-2rem)] max-w-md flex-col overflow-hidden rounded-3xl border border-violet-200/70 bg-white/95 shadow-[0_24px_80px_rgba(79,70,229,0.22)] backdrop-blur-2xl ${panelAnchor ? '' : 'bottom-20 right-4 sm:right-5'}`}
+                    role="dialog"
+                    aria-modal={presentation === 'sidebar'}
+                    aria-label="Ask Crypto Pulse"
+                >
                     <div className="flex items-center justify-between border-b border-white/10 bg-gradient-to-r from-violet-500/10 to-transparent px-5 py-4">
                         <div>
                             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300">Personal agent</p>
                             <h3 className="mt-1 text-lg font-semibold">Ask Crypto Pulse</h3>
-                            <p className="text-xs text-muted-foreground">Answers use your goal, holdings and today&apos;s market. No buy or sell advice.</p>
                         </div>
                         <div className="flex items-center gap-3 text-xs">
                             {thread.length > 0 && (
@@ -153,7 +237,7 @@ export function AskDrawer() {
                             e.preventDefault()
                             ask(question)
                         }}
-                        className="flex gap-2 border-t border-white/10 bg-black/20 p-4"
+                        className="flex gap-2 border-t border-white/10 bg-violet-50/70 p-4"
                     >
                         <input
                             value={question}

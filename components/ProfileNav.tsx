@@ -1,18 +1,26 @@
 'use client'
 
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 
 export function ProfileNav() {
+    const pathname = usePathname()
     const investorId = useSearchParams().get('investor') ?? 'you'
     const suffix = investorId === 'you' ? '' : `?investor=${encodeURIComponent(investorId)}`
+    const links = [
+        { href: `/${suffix}`, path: '/', label: 'Today' },
+        { href: `/markets${suffix}`, path: '/markets', label: 'Market' },
+        { href: `/practice${suffix}`, path: '/practice', label: 'Crash Lab' },
+        { href: '/paper', path: '/paper', label: 'Paper Portfolio' },
+        { href: `/portfolio/edit${suffix}`, path: '/portfolio/edit', label: 'Your Plan' },
+    ]
 
     return (
         <nav className="hidden items-center gap-1 md:flex" aria-label="Primary navigation">
-            <Link href={`/${suffix}`} className="rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground">Today</Link>
-            <Link href={`/markets${suffix}`} className="rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground">Market</Link>
-            <Link href={`/practice${suffix}`} className="rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground">Crash Lab</Link>
-            <Link href={`/portfolio/edit${suffix}`} className="rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground">Your Plan</Link>
+            {links.map((link) => {
+                const active = pathname === link.path || (link.path !== '/' && pathname.startsWith(`${link.path}/`))
+                return <Link key={link.path} href={link.href} aria-current={active ? 'page' : undefined} className={`group relative rounded-full px-4 py-2 text-sm font-medium transition-all duration-300 hover:-translate-y-0.5 ${active ? 'bg-violet-100 text-violet-800 shadow-[0_8px_24px_-15px_rgba(109,40,217,0.8)]' : 'text-muted-foreground hover:bg-white/5 hover:text-foreground'}`}><span className="relative z-10">{link.label}</span>{active && <span className="absolute inset-x-4 -bottom-0.5 h-0.5 rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-400 to-sky-400" />}</Link>
+            })}
         </nav>
     )
 }

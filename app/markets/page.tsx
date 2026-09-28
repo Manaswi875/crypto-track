@@ -452,7 +452,6 @@ export default function MarketInsights() {
                 </section>
             )}
 
-            <p className="text-xs text-muted-foreground">Market data from CoinGecko.</p>
         </div>
     )
 }
