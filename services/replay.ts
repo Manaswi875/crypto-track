@@ -139,15 +139,16 @@ export function ensureCrashEvents() {
 }
 
 export type AfterEffect = { days: number; moves: Record<string, number> } | null
+export type AfterPathPoint = { day: number; moves: Record<string, number> }
 
 /**
  * What actually happened after each past crash: each coin's change from the
  * crash-day close to 7 and 30 days later. History, not a prediction; null
  * when that much time hasn't passed yet.
  */
-export async function afterEffects(dates: string[]): Promise<Record<string, { d7: AfterEffect; d30: AfterEffect }>> {
+export async function afterEffects(dates: string[]): Promise<Record<string, { d7: AfterEffect; d30: AfterEffect; path30: AfterPathPoint[]; crashPrices: Record<string, number> }>> {
     const series = await loadYear()
-    const out: Record<string, { d7: AfterEffect; d30: AfterEffect }> = {}
+    const out: Record<string, { d7: AfterEffect; d30: AfterEffect; path30: AfterPathPoint[]; crashPrices: Record<string, number> }> = {}
     const later = (date: string, days: number): AfterEffect => {
         const moves: Record<string, number> = {}
         for (const c of REPLAY_COINS) {
@@ -158,6 +159,23 @@ export async function afterEffects(dates: string[]): Promise<Record<string, { d7
         }
         return { days, moves }
     }
-    for (const date of dates) out[date] = { d7: later(date, 7), d30: later(date, 30) }
+    const path = (date: string): AfterPathPoint[] => {
+        const points: AfterPathPoint[] = []
+        for (let offset = 0; offset <= 30; offset++) {
+            const moves: Record<string, number> = {}
+            for (const coin of REPLAY_COINS) {
+                const crashDay = series[coin].byDay.get(date)
+                const future = crashDay && series[coin].prices[crashDay.idx + offset]
+                if (!crashDay || !future) return points
+                moves[coin] = offset === 0 ? 0 : pctChange(crashDay.close, future[1])
+            }
+            points.push({ day: offset, moves })
+        }
+        return points
+    }
+    for (const date of dates) {
+        const crashPrices = Object.fromEntries(REPLAY_COINS.map((coin) => [coin, cents(series[coin].byDay.get(date)?.close ?? 0)]))
+        out[date] = { d7: later(date, 7), d30: later(date, 30), path30: path(date), crashPrices }
+    }
     return out
 }

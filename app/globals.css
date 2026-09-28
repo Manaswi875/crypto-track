@@ -36,33 +36,249 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 231 38% 6%;
+    --foreground: 220 24% 96%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 229 30% 9%;
+    --card-foreground: 220 24% 96%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 229 30% 9%;
+    --popover-foreground: 220 24% 96%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 267 84% 78%;
+    --primary-foreground: 231 38% 8%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 229 24% 14%;
+    --secondary-foreground: 220 24% 96%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 229 24% 14%;
+    --muted-foreground: 221 13% 64%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 267 32% 18%;
+    --accent-foreground: 267 90% 88%;
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --border: 228 20% 19%;
+    --input: 228 20% 19%;
+    --ring: 267 84% 78%;
+  }
+}
+
+@layer utilities {
+  .crash-grid {
+    background-color: hsl(var(--background));
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+      radial-gradient(circle at 78% 50%, rgba(239, 68, 68, 0.1), transparent 34%);
+    background-size: 32px 32px, 32px 32px, auto;
+  }
+
+  .signal-ring {
+    animation: signal-breathe 3s ease-in-out infinite;
+  }
+
+  .signal-ring-delay {
+    animation-delay: 0.8s;
+  }
+
+  .mode-enter {
+    animation: mode-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .crash-scene::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(105deg, transparent 35%, rgba(248, 113, 113, 0.055) 50%, transparent 65%);
+    transform: translateX(-100%);
+    animation: scene-scan 7s ease-in-out infinite;
+  }
+
+  .crash-line {
+    stroke-dasharray: 1800;
+    stroke-dashoffset: 1800;
+    animation: crash-line-draw 1.8s cubic-bezier(0.22, 1, 0.36, 1) 180ms forwards;
+  }
+
+  .replay-guide {
+    transform: translate(-50%, -50%);
+    transition: left 520ms cubic-bezier(0.22, 1, 0.36, 1), top 520ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .replay-character {
+    animation: replay-character-float 3s ease-in-out infinite;
+  }
+
+  .demo-trigger::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 25%, rgba(255, 255, 255, 0.5) 50%, transparent 75%);
+    transform: translateX(-150%);
+    transition: transform 650ms ease;
+  }
+
+  .demo-trigger:hover::after {
+    transform: translateX(150%);
+  }
+
+  .live-orb {
+    animation: live-orb 2.2s ease-in-out infinite;
+  }
+
+  .agent-strip {
+    transition: background-color 300ms ease, padding 300ms ease;
+  }
+
+  .agent-strip:hover {
+    background: linear-gradient(90deg, rgba(52, 211, 153, 0.035), transparent 55%);
+  }
+
+  .alert-sweep {
+    animation: alert-enter 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .buddy-orb {
+    animation: buddy-wander 6s ease-in-out infinite, buddy-arrive 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .buddy-face {
+    animation: buddy-blink 5s ease-in-out infinite;
+  }
+
+  .buddy-orbit {
+    animation: buddy-orbit 9s linear infinite;
+  }
+
+  .buddy-particle-two {
+    animation-delay: -1.2s;
+  }
+
+  .interactive-surface {
+    position: relative;
+    border-radius: 1rem;
+    transform: translateY(0);
+    transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 220ms ease, border-color 220ms ease, background-color 220ms ease;
+  }
+
+  .interactive-surface::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    background: linear-gradient(120deg, rgba(192, 132, 252, 0.045), transparent 48%);
+    opacity: 0;
+    transition: opacity 240ms ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .interactive-surface:hover {
+      z-index: 2;
+      border-color: rgba(192, 132, 252, 0.2);
+      transform: translateY(-2px);
+      box-shadow: 0 16px 42px -32px rgba(192, 132, 252, 0.38), inset 0 1px rgba(255, 255, 255, 0.035);
+    }
+
+    .interactive-surface:hover::before {
+      opacity: 1;
+    }
+  }
+}
+
+@keyframes signal-breathe {
+  0%, 100% { transform: scale(0.96); opacity: 0.35; }
+  50% { transform: scale(1.04); opacity: 0.9; }
+}
+
+@keyframes mode-enter {
+  from { opacity: 0; transform: translateY(12px); filter: blur(5px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+@keyframes scene-scan {
+  0%, 18% { transform: translateX(-100%); }
+  55%, 100% { transform: translateX(100%); }
+}
+
+@keyframes crash-line-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes replay-character-float {
+  0%, 100% { transform: translate3d(0, -3px, 0) rotate(-2deg); }
+  50% { transform: translate3d(0, 5px, 0) rotate(2deg); }
+}
+
+@keyframes live-orb {
+  0%, 100% { transform: scale(0.85); opacity: 0.7; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
+
+@keyframes alert-enter {
+  from { opacity: 0; transform: scaleY(0.9) translateY(-8px); }
+  to { opacity: 1; transform: scaleY(1) translateY(0); }
+}
+
+@keyframes buddy-wander {
+  0%, 100% { transform: translate3d(-8px, 2px, 0) rotate(-2deg); }
+  25% { transform: translate3d(6px, -9px, 0) rotate(1deg); }
+  55% { transform: translate3d(10px, 1px, 0) rotate(2deg); }
+  78% { transform: translate3d(-3px, 8px, 0) rotate(-1deg); }
+}
+
+@keyframes buddy-arrive {
+  from { opacity: 0; scale: 0.82; }
+  to { opacity: 1; scale: 1; }
+}
+
+@keyframes buddy-orbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes buddy-blink {
+  0%, 44%, 50%, 100% { transform: scaleY(1); }
+  47% { transform: scaleY(0.15); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .signal-ring,
+  .mode-enter,
+  .crash-scene::after,
+  .crash-line,
+  .replay-character,
+  .live-orb,
+  .alert-sweep,
+  .buddy-orb,
+  .buddy-face,
+  .buddy-orbit { animation: none; }
+
+  .demo-trigger::after { display: none; }
+
+  .interactive-surface,
+  .interactive-surface:hover {
+    transform: none;
+    transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .replay-guide {
+    left: 1rem !important;
+    right: 1rem;
+    top: auto !important;
+    bottom: 1.5rem;
+    transform: none;
+  }
+
+  .replay-guide-dialog {
+    left: 3.75rem !important;
+    right: auto !important;
+    width: calc(100vw - 8.5rem);
   }
 }
 
@@ -72,5 +288,9 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "ss01" 1, "cv11" 1;
+  }
+  ::selection {
+    background: rgba(192, 132, 252, 0.28);
   }
 }

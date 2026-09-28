@@ -54,7 +54,7 @@ AI calls only happen when you ask for an insight, and each insight is cached per
 
 ### Crash alerts
 
-The server monitors prices continuously and sends external alerts only when a downward move crosses the threshold saved in the user's profile. The app suggests 5%, 7%, or 10% from their time horizon and loss tolerance, but the user can choose 3–20% or turn alerts off. Set `SLACK_WEBHOOK_URL` for Slack, or `RESEND_API_KEY`, `ALERT_EMAIL_FROM`, and `ALERT_EMAIL_TO` for email. Alert summaries use deterministic portfolio math and do not call the AI. `APP_URL` controls the link in each message.
+The server continuously compares each crypto holding's live value with the amount the user invested. Users can set a separate loss limit for each currency they hold and another for their combined crypto portfolio; either can trigger Slack or email once per crossing. Currency rules accept 1–50%, the crypto-portfolio rule accepts 1–25%, and a 0.5-point recovery buffer prevents repeated alerts around the boundary. CoinGecko's rolling 24-hour changes remain the separate market-crash signal. Set `SLACK_WEBHOOK_URL` for Slack, or `RESEND_API_KEY`, `ALERT_EMAIL_FROM`, and `ALERT_EMAIL_TO` for email. Alert summaries use deterministic portfolio math and do not call the AI. `APP_URL` controls the link in each message.
 
 For the evaluation approach, mistakes found during development, and demo-safety workflow, see [How I Built Crypto Pulse with AI](BUILDING_WITH_AI.md).
 

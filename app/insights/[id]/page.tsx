@@ -51,6 +51,12 @@ export default function InsightPage({ params }: { params: { id: string } }) {
         load()
     }, [load])
 
+    useEffect(() => {
+        const investorId = data?.insight.investorId
+        if (!investorId || investorId === 'you' || new URLSearchParams(window.location.search).has('investor')) return
+        window.history.replaceState(null, '', `/insights/${params.id}?investor=${encodeURIComponent(investorId)}`)
+    }, [data, params.id])
+
     // Poll while the agent is working
     const generating = data?.insight.status === 'generating'
     useEffect(() => {
@@ -79,7 +85,7 @@ export default function InsightPage({ params }: { params: { id: string } }) {
     const flags = i.complianceFlags ?? []
 
     return (
-        <div className="mx-auto max-w-3xl space-y-6">
+        <div className="mx-auto max-w-4xl space-y-8">
             <div>
                 <Link href={`/?investor=${i.investor.id}`} className="text-sm text-muted-foreground hover:text-foreground">
                     ← {i.investor.isDemo ? `${i.investor.name}'s portfolio` : 'Today'}
@@ -91,7 +97,7 @@ export default function InsightPage({ params }: { params: { id: string } }) {
             </div>
 
             {/* Deterministic numbers, shown before and independent of the AI */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="interactive-surface grid grid-cols-3 border-y">
                 <Figure label={`${who === 'You' ? 'Your' : `${who}'s`} impact`} value={usd(i.impactUsd)} tone="red" />
                 <Figure label="Of everything you have" value={pct(i.impactPctOfTotal)} tone="red" />
                 <Figure label="Crypto exposure" value={usd(i.exposureUsd)} hint={`of ${usd(total)}`} />
@@ -107,12 +113,12 @@ export default function InsightPage({ params }: { params: { id: string } }) {
 
             {i.status === 'ready' && (
                 <>
-                    <div className="space-y-3">
+                    <div className="space-y-3 border-l-2 border-violet-400 pl-5">
                         <UrgencyBadge urgency={i.urgency} />
                         <h2 className="text-2xl font-semibold leading-snug tracking-tight">{i.headline}</h2>
                     </div>
 
-                    <Panel>
+                    <article className="interactive-surface border-y px-5 py-7">
                         <div id="insight-body" className="space-y-5 text-[15px] leading-relaxed">
                             <Section title="What happened">{i.whatHappened}</Section>
                             <Section title={`What it means for ${who === 'You' ? 'you' : who}`}>{i.whatItMeans}</Section>
@@ -135,11 +141,11 @@ export default function InsightPage({ params }: { params: { id: string } }) {
                                 <span className="text-amber-400">⚠ Flagged: {flags.map((f) => `"${f.match}"`).join(', ')}</span>
                             )}
                         </div>
-                    </Panel>
+                    </article>
 
                     <FollowUp insightId={i.id} selectableId="insight-body" initial={i.messages} />
 
-                    <details className="group rounded-xl border bg-card/50">
+                    <details className="interactive-surface group rounded-xl border bg-card/50">
                         <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-3 text-sm font-semibold">
                             <span>
                                 How this was made <span className="font-normal text-muted-foreground group-open:hidden">▸</span>
@@ -216,7 +222,7 @@ function LiveProgress({ steps }: { steps: TraceStep[] }) {
 
 function Figure({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: 'red' }) {
     return (
-        <div className="rounded-xl border bg-card/50 px-4 py-3">
+        <div className="border-l px-4 py-4 first:border-l-0">
             <div className="text-xs text-muted-foreground">{label}</div>
             <div className={`mt-1 text-xl font-semibold tabular-nums ${tone === 'red' ? 'text-red-400' : ''}`}>{value}</div>
             {hint && <div className="text-xs text-muted-foreground">{hint}</div>}

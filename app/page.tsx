@@ -3,10 +3,24 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
-import { Panel, UrgencyBadge } from '@/components/Badges'
+import { UrgencyBadge } from '@/components/Badges'
 import { Moves, eventTitle } from '@/components/Moves'
 import { useSocket } from '@/context/SocketContext'
+import { DEMO_CRASH_MOVES, DEMO_MARKET_CHANGE_PCT } from '@/lib/demoCrash'
 import { COIN_SYMBOL, date, dateTime, pct, usd } from '@/lib/format'
+import { cryptoLossSnapshot } from '@/lib/personalAlerts'
+
+type CurrencyAlertSetting = { coinId: string; enabled: boolean; thresholdPct: number }
+type AlertSettings = { enabled: boolean; cryptoPortfolio: { enabled: boolean; thresholdPct: number }; currencies: CurrencyAlertSetting[] }
+type CurrencyTrigger = { coinId: string; thresholdPct: number; lossPct: number; lossUsd: number; currentValueUsd: number; investedValueUsd: number }
+type PortfolioTrigger = { thresholdPct: number; lossPct: number; lossUsd: number; currentValueUsd: number; investedValueUsd: number }
+type PersonalAlert = {
+    triggerType: string
+    triggerDetails: { currencyTriggers: CurrencyTrigger[]; portfolioTrigger: PortfolioTrigger | null }
+    cryptoImpactUsd: number
+    cryptoImpactPct: number
+    hypothetical: boolean
+}
 
 type Position = {
     id: string
@@ -30,6 +44,7 @@ type EventRow = {
     occurredAt: string
     impact: { exposureUsd: number; impactUsd: number; impactPctOfTotal: number }
     insight: { id: string; status: string; urgency: string | null; headline: string | null } | null
+    personalAlert: PersonalAlert | null
     after: { d7: After; d30: After } | null
 }
 type Today = {
@@ -54,6 +69,7 @@ type InvestorData = {
         dropComfortPct: number
         alertEnabled: boolean
         alertThresholdPct: number
+        alertSettings: AlertSettings
         isDemo: boolean
         positions: Position[]
     }
@@ -62,15 +78,23 @@ type InvestorData = {
     events: EventRow[]
 }
 type InvestorSummary = { id: string; name: string; tagline: string; isDemo: boolean }
-type LiveAlert = { id: string; coinId: string; changePct: number; severity: string; occurredAt: string }
-
-const splitName = (name: string) => {
-    const m = name.match(/^(.*?)\s*\((.*)\)$/)
-    return m ? [m[1], m[2]] : [name, '']
+type LiveAlert = {
+    id: string
+    investorId: string
+    coinId: string
+    changePct: number
+    severity: string
+    occurredAt: string
+    headline: string
+    triggerType: string
+    currencyTriggers: CurrencyTrigger[]
+    portfolioTrigger: PortfolioTrigger | null
+    cryptoImpactUsd: number
+    cryptoImpactPct: number
+    hypothetical: boolean
 }
 
 const COIN_NAME: Record<string, string> = { bitcoin: 'Bitcoin', ethereum: 'Ethereum', solana: 'Solana' }
-
 function Signed({ v, children }: { v: number; children: React.ReactNode }) {
     return <span className={`tabular-nums ${v < 0 ? 'text-red-400' : 'text-emerald-400'}`}>{children}</span>
 }
@@ -80,14 +104,23 @@ function Signed({ v, children }: { v: number; children: React.ReactNode }) {
  * how the biggest-moving held coin compares with a normal day, and where the
  * move sits against the investor's loss tolerance.
  */
-function todayStatus(t: Today, tolerance: number) {
+function todayStatus(t: Today, alertSettings: AlertSettings, positions: Position[]) {
     const coins = Object.entries(t.coins)
     if (coins.length === 0) return { tone: 'calm' as const, text: 'You don’t hold any crypto yet.' }
+    const snapshot = cryptoLossSnapshot(positions)
+    const crossedCurrency = alertSettings.enabled ? alertSettings.currencies
+        .filter((setting) => setting.enabled)
+        .map((setting) => [setting, snapshot.currencies.find((currency) => currency.coinId === setting.coinId)] as const)
+        .find(([setting, holding]) => holding && holding.lossPct <= -setting.thresholdPct) : undefined
+    if (crossedCurrency) {
+        const [setting, holding] = crossedCurrency
+        return { tone: 'alert' as const, text: `${COIN_NAME[setting.coinId] ?? setting.coinId} is ${pct(holding!.lossPct, 1)} versus what you invested, crossing your ${setting.thresholdPct}% loss limit.` }
+    }
+    if (alertSettings.enabled && alertSettings.cryptoPortfolio.enabled && snapshot.complete && snapshot.investedValueUsd > 0 && snapshot.lossPct <= -alertSettings.cryptoPortfolio.thresholdPct)
+        return { tone: 'alert' as const, text: `Your combined crypto holdings crossed the ${alertSettings.cryptoPortfolio.thresholdPct}% portfolio-loss limit.` }
     const [coinId, c] = coins.reduce((a, b) => (Math.abs(b[1].change24hPct) > Math.abs(a[1].change24hPct) ? b : a))
     const name = COIN_NAME[coinId] ?? coinId
     const move = `${name} ${pct(c.change24hPct, 1)}`
-    if (Math.abs(c.change24hPct) > tolerance)
-        return { tone: 'alert' as const, text: `A big day: ${move}, beyond the ${tolerance}% loss tolerance you set. Worth a look at what it means for you.` }
     if (c.todayVsTypical >= 3) return { tone: 'watch' as const, text: `An unusually big move today: ${move}, against a typical day of about ±${c.typicalDailyMovePct.toFixed(1)}%.` }
     if (c.todayVsTypical >= 1.5) return { tone: 'watch' as const, text: `A bigger move than usual: ${move}, against a typical day of about ±${c.typicalDailyMovePct.toFixed(1)}%. Still within your plan.` }
     return { tone: 'calm' as const, text: `A normal day for your crypto: ${move}, well within a typical day of about ±${c.typicalDailyMovePct.toFixed(1)}%. Nothing needs your attention.` }
@@ -104,10 +137,13 @@ export default function TodayPage() {
     const [liveAlert, setLiveAlert] = useState<LiveAlert | null>(null)
     const [notificationsEnabled, setNotificationsEnabled] = useState(false)
     const [triggeringDemo, setTriggeringDemo] = useState(false)
+    const [viewMode, setViewMode] = useState<'live' | 'crash'>('live')
 
     useEffect(() => {
+        const params = new URLSearchParams(window.location.search)
         fetch('/api/investors').then(async (r) => r.ok && setInvestors(await r.json()))
-        setSelected(new URLSearchParams(window.location.search).get('investor') ?? 'you')
+        setSelected(params.get('investor') ?? 'you')
+        setViewMode(params.get('mode') === 'crash' ? 'crash' : 'live')
     }, [])
 
     const load = useCallback(async () => {
@@ -118,10 +154,18 @@ export default function TodayPage() {
 
     useEffect(() => {
         if (!selected) return
-        window.history.replaceState(null, '', selected === 'you' ? '/' : `/?investor=${selected}`)
         setData(null)
         load()
     }, [selected, load])
+
+    useEffect(() => {
+        if (!selected) return
+        const params = new URLSearchParams()
+        if (selected !== 'you') params.set('investor', selected)
+        if (viewMode === 'crash') params.set('mode', 'crash')
+        const query = params.toString()
+        window.history.replaceState(null, '', query ? `/?${query}` : '/')
+    }, [selected, viewMode])
 
     useEffect(() => {
         setNotificationsEnabled(typeof Notification !== 'undefined' && Notification.permission === 'granted')
@@ -130,21 +174,21 @@ export default function TodayPage() {
     useEffect(() => {
         if (!socket) return
         const onAlert = (alert: LiveAlert) => {
+            if (selected && alert.investorId !== selected) return
             setLiveAlert(alert)
             void load()
             if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-                const coin = COIN_NAME[alert.coinId] ?? alert.coinId
-                new Notification(`Crypto Pulse: ${coin} big move`, {
-                    body: `${coin} moved ${pct(alert.changePct, 1)}. Open Crypto Pulse to see the impact on your money.`,
+                new Notification(alert.hypothetical ? `[DEMO] ${alert.headline}` : alert.headline, {
+                    body: `Your crypto is ${pct(alert.cryptoImpactPct, 1)} (${usd(alert.cryptoImpactUsd)}) versus what you invested.`,
                     tag: alert.id,
                 })
             }
         }
-        socket.on('volatility-alert', onAlert)
+        socket.on('personal-alert', onAlert)
         return () => {
-            socket.off('volatility-alert', onAlert)
+            socket.off('personal-alert', onAlert)
         }
-    }, [socket, load])
+    }, [socket, load, selected])
 
     async function enableNotifications() {
         if (typeof Notification === 'undefined') return
@@ -153,9 +197,10 @@ export default function TodayPage() {
     }
 
     async function triggerDemoCrash() {
+        setViewMode('crash')
         setTriggeringDemo(true)
         setError(null)
-        const res = await fetch('/api/events/demo', { method: 'POST' })
+        const res = await fetch('/api/events/demo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ investorId: selected }) })
         const body = await res.json()
         setTriggeringDemo(false)
         if (!res.ok) return setError(body.error ?? 'Could not trigger the demo crash')
@@ -174,34 +219,67 @@ export default function TodayPage() {
         })
         setBusy(null)
         if (!res.ok) return setError((await res.json()).error ?? 'Could not create insight')
-        router.push(`/insights/${(await res.json()).id}`)
+        router.push(`/insights/${(await res.json()).id}${selected === 'you' ? '' : `?investor=${selected}`}`)
     }
 
     const examples = investors.filter((i) => i.isDemo)
     const inv = data?.investor
     const t = data?.today
     const who = inv?.isDemo ? inv.name : 'you'
+    const activeEvent = liveAlert ? data?.events.find((event) => event.id === liveAlert.id) : null
+    const todayKey = new Date().toDateString()
+    const todayAlerts = data?.events.filter((event) => event.personalAlert && !event.personalAlert.hypothetical && new Date(event.occurredAt).toDateString() === todayKey) ?? []
+    const demoAlerts = data?.events.filter((event) => event.personalAlert?.hypothetical && new Date(event.occurredAt).toDateString() === todayKey).slice(0, 1) ?? []
+    const visibleAlerts = viewMode === 'live' ? todayAlerts : demoAlerts
+    const scenarioPositions = inv ? inv.positions.map((position) => ({
+        ...position,
+        marketValue: position.coinId ? position.marketValue * (1 + (DEMO_CRASH_MOVES[position.coinId] ?? 0) / 100) : position.marketValue,
+    })) : null
+    const demoSnapshot = scenarioPositions ? cryptoLossSnapshot(scenarioPositions) : null
+    const scenarioCryptoUsd = scenarioPositions?.filter((position) => position.coinId).reduce((sum, position) => sum + position.marketValue, 0) ?? 0
+    const scenarioMarketLossUsd = t ? scenarioCryptoUsd - t.cryptoUsd : 0
+    const scenarioCoinIds = [...new Set(inv?.positions.flatMap((position) => position.coinId ? [position.coinId] : []) ?? [])]
+    const scenarioToday: Today | null = t && demoSnapshot ? {
+        ...t,
+        totalUsd: t.totalUsd + scenarioMarketLossUsd,
+        cryptoUsd: scenarioCryptoUsd,
+        change24hUsd: scenarioMarketLossUsd,
+        change24hPct: t.cryptoUsd ? (scenarioMarketLossUsd / t.cryptoUsd) * 100 : 0,
+        investedUsd: demoSnapshot.complete ? demoSnapshot.investedValueUsd : null,
+        gainUsd: demoSnapshot.complete ? demoSnapshot.lossUsd : null,
+        marketChange24hPct: DEMO_MARKET_CHANGE_PCT,
+        coins: Object.fromEntries(scenarioCoinIds.map((coinId) => {
+            const coin = t.coins[coinId] ?? { change24hPct: 0, typicalDailyMovePct: 2, todayVsTypical: 0 }
+            const move = DEMO_CRASH_MOVES[coinId] ?? coin.change24hPct
+            return [coinId, { ...coin, change24hPct: move, todayVsTypical: coin.typicalDailyMovePct ? Math.abs(move) / coin.typicalDailyMovePct : coin.todayVsTypical }]
+        })),
+    } : null
+    const demoCurrencyTriggers = inv?.alertSettings.currencies.filter((setting) => setting.enabled && (demoSnapshot?.currencies.find((currency) => currency.coinId === setting.coinId)?.lossPct ?? 0) <= -setting.thresholdPct) ?? []
+    const demoPortfolioTriggers = Boolean(inv?.alertSettings.cryptoPortfolio.enabled && demoSnapshot && demoSnapshot.lossPct <= -inv.alertSettings.cryptoPortfolio.thresholdPct)
+    const demoWouldAlert = Boolean(inv?.alertSettings.enabled && (demoCurrencyTriggers.length > 0 || demoPortfolioTriggers))
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <h2 className="text-3xl font-bold tracking-tight">Today</h2>
-                    <p className="text-muted-foreground">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+                    <h2 className="text-3xl font-bold tracking-tight">{viewMode === 'live' ? 'Today' : 'Crash scenario'}</h2>
+                    <p className="text-muted-foreground">{viewMode === 'live' ? new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : 'A guided replay of how the agent responds'}</p>
                 </div>
-                {examples.length > 0 && (
-                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                        Try an example investor
-                        <select value={selected ?? 'you'} onChange={(e) => setSelected(e.target.value)} className="rounded-md border bg-background px-2 py-1 text-sm text-foreground">
-                            <option value="you">— Your portfolio —</option>
-                            {examples.map((i) => (
-                                <option key={i.id} value={i.id}>
-                                    {i.name}: {i.tagline}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
-                )}
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex rounded-full border border-white/10 bg-white/[0.03] p-1" role="group" aria-label="Today view">
+                        <button onClick={() => setViewMode('live')} aria-pressed={viewMode === 'live'} className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${viewMode === 'live' ? 'bg-foreground text-background shadow-lg' : 'text-muted-foreground hover:text-foreground'}`}>Live today</button>
+                        <button onClick={() => setViewMode('crash')} aria-pressed={viewMode === 'crash'} className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${viewMode === 'crash' ? 'bg-red-400 text-red-950 shadow-[0_0_20px_rgba(248,113,113,0.2)]' : 'text-muted-foreground hover:text-foreground'}`}>Crash scenario</button>
+                    </div>
+                    {examples.length > 0 && (
+                        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                            Investor
+                            <select value={selected ?? 'you'} onChange={(e) => setSelected(e.target.value)} className="rounded-full border border-white/10 bg-background px-3 py-1.5 text-xs text-foreground">
+                                <option value="you">Your portfolio</option>
+                                {examples.map((i) => <option key={i.id} value={i.id}>{i.name}: {i.tagline}</option>)}
+                            </select>
+                        </label>
+                    )}
+                </div>
             </div>
 
             {inv?.isDemo && (
@@ -213,109 +291,186 @@ export default function TodayPage() {
                 </div>
             )}
 
-            {liveAlert && (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/40 bg-red-500/10 px-5 py-4" role="alert">
-                    <div>
-                        <p className="font-semibold text-red-300">Live big-move alert</p>
-                        <p className="text-sm">
-                            {COIN_NAME[liveAlert.coinId] ?? liveAlert.coinId} moved <span className="font-semibold tabular-nums">{pct(liveAlert.changePct, 1)}</span>. Your impact has been added below.
-                        </p>
-                    </div>
-                    <button onClick={() => setLiveAlert(null)} className="text-sm font-medium text-muted-foreground hover:text-foreground">Dismiss</button>
-                </div>
-            )}
-
             {!inv || !t ? (
                 <div className="text-muted-foreground">Loading…</div>
             ) : (
-                <>
+                <div key={viewMode} className="mode-enter space-y-6">
                     {!data.aiEnabled && (
                         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">ANTHROPIC_API_KEY is not set, so AI features are off.</div>
                     )}
 
-                    <TodayCard t={t} tolerance={inv.dropComfortPct} investorId={inv.id} />
+                    {viewMode === 'crash' && (
+                        <DemoStory
+                            name={inv.isDemo ? inv.name : 'You'}
+                            goal={inv.goal}
+                            cryptoUsd={t.cryptoUsd}
+                            alertSettings={inv.alertSettings}
+                            scenarioLossUsd={demoSnapshot?.lossUsd ?? 0}
+                            scenarioLossPct={demoSnapshot?.lossPct ?? 0}
+                            wouldAlert={demoWouldAlert}
+                            triggering={triggeringDemo}
+                            notificationsEnabled={notificationsEnabled}
+                            triggered={activeEvent?.context?.hypothetical === true}
+                            onEnableNotifications={enableNotifications}
+                            onTrigger={triggerDemoCrash}
+                        />
+                    )}
 
-                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                        <div className="space-y-6 lg:col-span-2">
-                            <Panel
-                                title="Big moves"
-                                action={
-                                    <span className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                        <span className={isConnected ? 'text-emerald-400' : 'text-amber-300'}>{isConnected ? '● Monitoring live' : '○ Reconnecting'}</span>
-                                        {!notificationsEnabled && typeof Notification !== 'undefined' && Notification.permission !== 'denied' && (
-                                            <button onClick={enableNotifications} className="font-medium text-primary hover:underline">Enable browser alerts</button>
-                                        )}
-                                        <button onClick={triggerDemoCrash} disabled={triggeringDemo} className="font-medium text-primary hover:underline disabled:opacity-50">
-                                            {triggeringDemo ? 'Triggering…' : 'Trigger demo crash'}
+                    {error && <p className="text-sm text-red-400">{error}</p>}
+
+                    {liveAlert && (viewMode === 'crash' || !activeEvent?.context?.hypothetical) && (
+                        <div className="interactive-surface alert-sweep -mx-4 border-y border-red-500/40 bg-gradient-to-r from-red-500/15 via-red-500/5 to-transparent px-4 py-6 sm:px-8" role="alert">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-red-300">Active alert</p>
+                                    <p className="mt-1 text-lg font-semibold">
+                                        {liveAlert.headline}
+                                    </p>
+                                    {activeEvent && (
+                                        <p className="mt-1 text-sm text-muted-foreground">
+                                            Loss versus amount invested: <span className="font-medium text-red-300">{usd(liveAlert.cryptoImpactUsd)}</span> · {pct(liveAlert.cryptoImpactPct)}
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    {activeEvent && activeEvent.impact.exposureUsd > 0 && (
+                                        <button onClick={() => explain(activeEvent.id)} disabled={busy !== null || !data.aiEnabled} className="rounded-md bg-red-400 px-3 py-1.5 text-sm font-semibold text-red-950 hover:bg-red-300 disabled:opacity-50">
+                                            Understand this crash
                                         </button>
-                                        <span>What each one means for {who}</span>
-                                    </span>
-                                }
-                            >
-                                {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
-                                {[
-                                    { title: 'Live', hint: 'Sharp moves of 3% or more, as they happen', events: data.events.filter((e) => e.source === 'live') },
-                                    { title: 'Past crashes', hint: 'Real sell-offs from the past year, applied to today’s holdings', events: data.events.filter((e) => e.source === 'replay') },
-                                ]
-                                    .filter((g) => g.events.length > 0)
-                                    .map((g) => (
-                                        <div key={g.title} className="mb-4 last:mb-0">
-                                            <div className="flex flex-wrap items-baseline justify-between gap-2">
-                                                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{g.title}</h4>
-                                                <span className="text-xs text-muted-foreground">{g.hint}</span>
-                                            </div>
-                                            <ul className="divide-y">
-                                                {g.events.map((e) => (
-                                                    <MoveRow key={e.id} e={e} who={who} busy={busy === e.id} disabled={busy !== null || !data.aiEnabled} onExplain={() => explain(e.id)} />
-                                                ))}
-                                            </ul>
-                                        </div>
+                                    )}
+                                    <button onClick={() => setLiveAlert(null)} className="text-sm font-medium text-muted-foreground hover:text-foreground">Dismiss</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <AgentStatus
+                        t={viewMode === 'crash' && scenarioToday ? scenarioToday : t}
+                        alertSettings={inv.alertSettings}
+                        positions={viewMode === 'crash' && scenarioPositions ? scenarioPositions : inv.positions}
+                        heldCoins={inv.positions.filter((position) => position.coinId).length}
+                        isConnected={isConnected}
+                        scenario={viewMode === 'crash'}
+                    />
+
+                    <MoneySnapshot t={viewMode === 'crash' && scenarioToday ? scenarioToday : t} investorId={inv.id} scenario={viewMode === 'crash'} />
+
+                    {viewMode === 'crash' && activeEvent && <CrashImpact event={activeEvent} totalUsd={t.totalUsd} />}
+
+                    {visibleAlerts.length > 0 && (
+                            <section className="interactive-surface px-4 py-4 sm:px-5">
+                                <div className="flex flex-wrap items-end justify-between gap-2 border-b pb-3">
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-300">{viewMode === 'live' ? 'Today’s alerts' : 'Demo alert'}</p>
+                                        <h3 className="mt-1 text-xl font-semibold">What the agent noticed</h3>
+                                    </div>
+                                    <span className="text-xs text-muted-foreground">Personal impact for {who}</span>
+                                </div>
+                                <ul className="divide-y divide-border/70">
+                                    {visibleAlerts.map((event) => (
+                                        <MoveRow key={event.id} e={event} who={who} investorId={inv.id} busy={busy === event.id} disabled={busy !== null || !data.aiEnabled} onExplain={() => explain(event.id)} />
                                     ))}
-                                {data.events.length === 0 && <p className="text-sm text-muted-foreground">Loading crashes…</p>}
-                            </Panel>
-                        </div>
-
-                        <div className="space-y-6">
-                            <Panel
-                                title={inv.isDemo ? `${inv.name}'s goal` : 'Your goal'}
-                                action={
-                                    !inv.isDemo && (
-                                        <span className="flex gap-3 text-xs font-medium">
-                                            <Link href="/setup" className="text-primary hover:underline">Describe it with AI</Link>
-                                            <Link href="/portfolio/edit" className="text-primary hover:underline">Edit</Link>
-                                        </span>
-                                    )
-                                }
-                            >
-                                <p className="text-lg font-semibold leading-snug">{inv.goal}</p>
-                                <dl className="mt-3 space-y-2 text-sm">
-                                    {inv.cryptoReason && <Row label="Why crypto" value={inv.cryptoReason} />}
-                                    <Row label="Needs the money" value={inv.timeHorizon} />
-                                    <Row label="Crypto loss tolerance" value={`${inv.dropComfortPct}%`} />
-                                    <Row label="External alerts" value={inv.alertEnabled ? `At a ${inv.alertThresholdPct}% drop` : 'Off'} />
-                                </dl>
-                            </Panel>
-
-                            <MoneyPanel title={inv.isDemo ? `${inv.name}'s money` : 'Your money'} positions={inv.positions} total={t.totalUsd} />
-                        </div>
-                    </div>
-                </>
+                                </ul>
+                            </section>
+                    )}
+                </div>
             )}
         </div>
     )
 }
 
-function TodayCard({ t, tolerance, investorId }: { t: Today; tolerance: number; investorId: string }) {
-    const status = todayStatus(t, tolerance)
-    const tone = status.tone === 'alert' ? 'border-amber-500/40 bg-amber-500/5' : status.tone === 'watch' ? 'border-sky-500/30 bg-sky-500/5' : 'border-emerald-500/20 bg-emerald-500/5'
+function DemoStory({ name, goal, cryptoUsd, alertSettings, scenarioLossUsd, scenarioLossPct, wouldAlert, triggering, notificationsEnabled, triggered, onEnableNotifications, onTrigger }: { name: string; goal: string; cryptoUsd: number; alertSettings: AlertSettings; scenarioLossUsd: number; scenarioLossPct: number; wouldAlert: boolean; triggering: boolean; notificationsEnabled: boolean; triggered: boolean; onEnableNotifications: () => void; onTrigger: () => void }) {
+    const steps = ['Crash detected', wouldAlert ? 'Slack alert sent' : 'No interruption needed', 'Impact calculated']
     return (
-        <section className={`rounded-xl border p-5 ${tone}`}>
-            <p className="text-lg font-medium leading-snug">{status.text}</p>
-            <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <Figure label="Everything you have" value={usd(t.totalUsd)} />
-                <Figure label="Your crypto" value={usd(t.cryptoUsd)} hint={t.totalUsd ? `${((t.cryptoUsd / t.totalUsd) * 100).toFixed(0)}% of everything` : undefined} />
+        <section className="interactive-surface crash-grid crash-scene relative -mx-4 overflow-hidden border-y border-red-500/20 px-4 py-10 sm:px-8 sm:py-14">
+            <div className="pointer-events-none absolute -left-24 top-8 h-64 w-64 rounded-full bg-red-500/10 blur-3xl" />
+            <div className="pointer-events-none absolute right-0 top-0 h-72 w-72 rounded-full bg-violet-500/10 blur-3xl" />
+            <div className="relative grid items-center gap-10 lg:grid-cols-[1.2fr_0.8fr]">
+                <div>
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-red-300">
+                        <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-red-400" /></span>
+                        Today&apos;s incident
+                    </div>
+                    <h3 className="mt-4 max-w-3xl text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl">Crypto crashed.<br /><span className="text-muted-foreground">Your agent was already watching.</span></h3>
+                    <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground">
+                        {name} {name.toLowerCase() === 'you' ? 'are' : 'is'} working toward <span className="font-medium text-foreground">{goal}</span>, with <span className="font-medium text-foreground">{usd(cryptoUsd)}</span> exposed to crypto. After this crash, the crypto would be <span className="font-medium text-red-300">{usd(scenarioLossUsd)} ({pct(scenarioLossPct)})</span> versus the amount invested, against a {alertSettings.cryptoPortfolio.thresholdPct}% combined-crypto limit. {wouldAlert ? 'At least one configured loss limit is crossed, so the agent sends an alert.' : 'The investment remains inside the configured currency and crypto-portfolio limits.'}
+                    </p>
+
+                    <ol className="mt-8 flex flex-col gap-0 sm:flex-row sm:items-center">
+                        {steps.map((step, index) => (
+                            <li key={step} className="flex flex-1 items-center">
+                                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-all duration-500 ${triggered ? 'bg-emerald-400 text-emerald-950 shadow-[0_0_24px_rgba(52,211,153,0.35)]' : index === 0 ? 'bg-red-400 text-red-950' : 'border border-white/20 bg-background/60 text-muted-foreground'}`}>{triggered ? '✓' : index + 1}</span>
+                                <span className="ml-2 text-sm font-medium">{step}</span>
+                                {index < steps.length - 1 && <span className={`mx-3 hidden h-px flex-1 sm:block ${triggered ? 'bg-emerald-400/60' : 'bg-border'}`} />}
+                            </li>
+                        ))}
+                    </ol>
+
+                    <div className="mt-8 flex flex-wrap items-center gap-4">
+                        <button onClick={onTrigger} disabled={triggering} className="demo-trigger group relative inline-flex items-center gap-3 overflow-hidden rounded-full bg-foreground px-5 py-2.5 text-sm font-semibold text-background transition-transform hover:scale-[1.03] active:scale-[0.98] disabled:opacity-50">
+                            <span>{triggering ? 'Replaying the crash…' : triggered ? 'Replay the alert' : 'Replay today’s crash'}</span>
+                            <span className="transition-transform group-hover:translate-x-1">→</span>
+                        </button>
+                        {!notificationsEnabled && typeof Notification !== 'undefined' && Notification.permission !== 'denied' && (
+                            <button onClick={onEnableNotifications} className="text-sm font-medium text-muted-foreground hover:text-foreground">Enable browser alerts</button>
+                        )}
+                        <span className="text-xs text-muted-foreground">{wouldAlert ? 'Sends a labeled demo alert to Slack.' : 'Recorded in the app without sending Slack.'}</span>
+                    </div>
+                </div>
+
+                <div className="relative mx-auto flex h-72 w-72 items-center justify-center sm:h-80 sm:w-80">
+                    <div className="signal-ring absolute inset-0 rounded-full border border-red-400/15" />
+                    <div className="signal-ring signal-ring-delay absolute inset-10 rounded-full border border-red-400/20" />
+                    <div className="absolute inset-20 rounded-full border border-red-400/30 bg-red-500/5 shadow-[inset_0_0_50px_rgba(248,113,113,0.08)]" />
+                    <div className="relative text-center">
+                        <div className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Bitcoin</div>
+                        <div className="mt-1 text-6xl font-semibold tracking-tighter text-red-400">{pct(DEMO_CRASH_MOVES.bitcoin, 1)}</div>
+                        <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-red-400/10 px-3 py-1 text-xs font-medium text-red-300">
+                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-400" /> {wouldAlert ? 'Comfort level exceeded' : 'Monitoring only'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    )
+}
+
+function AgentStatus({ t, alertSettings, positions, heldCoins, isConnected, scenario }: { t: Today; alertSettings: AlertSettings; positions: Position[]; heldCoins: number; isConnected: boolean; scenario: boolean }) {
+    const status = todayStatus(t, alertSettings, positions)
+    const enabledCurrencyRules = alertSettings.currencies.filter((setting) => setting.enabled).length
+    return (
+        <section className="interactive-surface agent-strip flex flex-col gap-4 border-y px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <div className="flex items-start gap-3">
+                <span className={`live-orb mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${scenario ? 'bg-red-400 shadow-[0_0_16px_rgba(248,113,113,0.8)]' : isConnected ? 'bg-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.8)]' : 'bg-amber-300'}`} />
+                <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Agent status · {scenario ? 'Running crash simulation' : isConnected ? 'Monitoring live' : 'Reconnecting'}</p>
+                    <p className="mt-1 text-lg font-medium leading-snug">{status.text}</p>
+                </div>
+            </div>
+            <div className="flex shrink-0 gap-5 text-xs text-muted-foreground sm:text-right">
+                <span><strong className="block text-lg font-semibold text-foreground">{heldCoins}</strong> holdings watched</span>
+                <span><strong className="block text-lg font-semibold text-foreground">{alertSettings.enabled ? enabledCurrencyRules : 'Off'}</strong> currency rules</span>
+                <span><strong className="block text-lg font-semibold text-foreground">{alertSettings.enabled && alertSettings.cryptoPortfolio.enabled ? `${alertSettings.cryptoPortfolio.thresholdPct}%` : 'Off'}</strong> crypto limit</span>
+            </div>
+        </section>
+    )
+}
+
+function MoneySnapshot({ t, investorId, scenario }: { t: Today; investorId: string; scenario: boolean }) {
+    const marketsHref = scenario
+        ? `/markets?mode=crash${investorId === 'you' ? '' : `&investor=${investorId}`}`
+        : `/markets${investorId === 'you' ? '' : `?investor=${investorId}`}#yours`
+    return (
+        <section className="interactive-surface px-4 py-4 sm:px-5">
+            <div className="mb-4 flex items-end justify-between gap-3">
+                <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{scenario ? 'Simulation · your money after the crash' : 'Your money today'}</p><h3 className="mt-1 text-xl font-semibold">{scenario ? 'What this scenario would do' : 'Your money in perspective'}</h3></div>
+                <Link href={marketsHref} className="text-xs font-medium text-primary hover:underline">Explore the market →</Link>
+            </div>
+            <div className="grid grid-cols-2 border-y sm:grid-cols-4">
+                <Figure label={scenario ? 'Everything after crash' : 'Everything you have'} value={usd(t.totalUsd)} />
+                <Figure label={scenario ? 'Crypto after crash' : 'Your crypto'} value={usd(t.cryptoUsd)} hint={t.totalUsd ? `${((t.cryptoUsd / t.totalUsd) * 100).toFixed(0)}% of everything` : undefined} />
                 <Figure
-                    label="Crypto today"
+                    label={scenario ? 'Crash impact' : 'Crypto today'}
                     value={<Signed v={t.change24hUsd}>{usd(t.change24hUsd, { sign: true })}</Signed>}
                     hint={
                         <>
@@ -325,21 +480,40 @@ function TodayCard({ t, tolerance, investorId }: { t: Today; tolerance: number; 
                     }
                 />
                 <Figure
-                    label={t.gainUsd == null ? 'Profit or loss' : t.gainUsd >= 0 ? 'Crypto profit overall' : 'Crypto loss overall'}
+                    label={t.gainUsd == null ? 'Profit or loss' : t.gainUsd >= 0 ? 'Crypto profit overall' : scenario ? 'Loss vs amount invested' : 'Crypto loss overall'}
                     value={t.gainUsd == null ? '—' : <Signed v={t.gainUsd}>{usd(t.gainUsd, { sign: true })}</Signed>}
                     hint={t.investedUsd != null && t.gainUsd != null ? `on ${usd(t.investedUsd)} put in` : 'Add what you put in'}
                 />
             </div>
-            <Link href={`/markets${investorId === 'you' ? '' : `?investor=${investorId}`}#yours`} className="mt-4 inline-block text-sm font-medium text-primary hover:underline">
-                See the market for your coins →
-            </Link>
         </section>
     )
 }
 
-function MoveRow({ e, who, busy, disabled, onExplain }: { e: EventRow; who: string; busy: boolean; disabled: boolean; onExplain: () => void }) {
+function CrashImpact({ event, totalUsd }: { event: EventRow; totalUsd: number }) {
+    return (
+        <section className="interactive-surface px-4 py-4 sm:px-5">
+            <div className="mb-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-300">Personal impact</p>
+                <h3 className="mt-1 text-xl font-semibold">The crash, translated into your money</h3>
+            </div>
+            <div className="grid grid-cols-2 border-y sm:grid-cols-4">
+                <Figure label="Everything you have" value={usd(totalUsd)} />
+                <Figure label="Crypto exposed" value={usd(event.impact.exposureUsd)} />
+                <Figure label="Estimated crash impact" value={<span className="text-red-400">{usd(event.impact.impactUsd)}</span>} />
+                <Figure label="Of everything" value={<span className="text-red-400">{pct(event.impact.impactPctOfTotal)}</span>} hint="Calculated in code" />
+            </div>
+        </section>
+    )
+}
+
+function MoveRow({ e, who, investorId, busy, disabled, onExplain }: { e: EventRow; who: string; investorId: string; busy: boolean; disabled: boolean; onExplain: () => void }) {
     const affected = e.impact.exposureUsd > 0
     const d30 = e.after?.d30
+    const alertDetails = e.personalAlert?.triggerDetails
+    const alertReasons = [
+        ...(alertDetails?.currencyTriggers.map((trigger) => `${COIN_NAME[trigger.coinId] ?? trigger.coinId} ${pct(trigger.lossPct)} vs ${trigger.thresholdPct}% limit`) ?? []),
+        ...(alertDetails?.portfolioTrigger ? [`Crypto portfolio ${pct(alertDetails.portfolioTrigger.lossPct)} vs ${alertDetails.portfolioTrigger.thresholdPct}% limit`] : []),
+    ]
     return (
         <li className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 space-y-1">
@@ -349,8 +523,11 @@ function MoveRow({ e, who, busy, disabled, onExplain }: { e: EventRow; who: stri
                     <span className="text-xs text-muted-foreground">{e.source === 'replay' ? date(e.occurredAt) : dateTime(e.occurredAt)}</span>
                 </div>
                 <Moves event={e} className="text-sm" />
+                {e.personalAlert && <div className="text-sm font-medium text-red-300">{alertReasons.join(' · ')}</div>}
                 <div className="text-sm">
-                    {affected ? (
+                    {e.personalAlert ? (
+                        <>{who === 'you' ? 'Your' : `${who}'s`} loss versus amount invested: <span className="font-medium tabular-nums text-red-400">{usd(e.personalAlert.cryptoImpactUsd)}</span> <span className="text-muted-foreground">({pct(e.personalAlert.cryptoImpactPct)})</span></>
+                    ) : affected ? (
                         <>
                             {who === 'you' ? 'Your' : `${who}'s`} impact: <span className="font-medium tabular-nums text-red-400">{usd(e.impact.impactUsd)}</span>{' '}
                             <span className="text-muted-foreground">({pct(e.impact.impactPctOfTotal)} of everything)</span>
@@ -380,7 +557,7 @@ function MoveRow({ e, who, busy, disabled, onExplain }: { e: EventRow; who: stri
             {affected && (
                 <div className="shrink-0">
                     {e.insight && e.insight.status !== 'failed' ? (
-                        <Link href={`/insights/${e.insight.id}`} className="inline-block rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+                        <Link href={`/insights/${e.insight.id}${investorId === 'you' ? '' : `?investor=${investorId}`}`} className="inline-block rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">
                             {e.insight.status === 'generating' ? 'Writing…' : 'Read insight'}
                         </Link>
                     ) : (
@@ -394,112 +571,13 @@ function MoveRow({ e, who, busy, disabled, onExplain }: { e: EventRow; who: stri
     )
 }
 
-const BUCKETS = [
-    { key: 'crypto', label: 'Crypto', dot: 'bg-amber-400', match: (p: Position) => !!p.coinId },
-    { key: 'cash', label: 'Cash & savings', dot: 'bg-sky-400', match: (p: Position) => p.assetClass === 'cash' },
-    { key: 'investments', label: 'Stocks & bonds', dot: 'bg-violet-400', match: (p: Position) => !p.coinId && p.assetClass !== 'cash' },
-]
-
-function MoneyPanel({ title, positions, total }: { title: string; positions: Position[]; total: number }) {
-    const share = (v: number) => (total ? `${((v / total) * 100).toFixed(0)}%` : '0%')
-    const buckets = BUCKETS.map((b) => {
-        const items = positions.filter(b.match)
-        return { ...b, items, value: items.reduce((s, p) => s + p.marketValue, 0) }
-    }).filter((b) => b.value > 0)
-    const crypto = buckets.find((b) => b.key === 'crypto')
-    const rest = buckets.filter((b) => b.key !== 'crypto')
-
-    return (
-        <Panel title={title} action={<span className="text-sm font-semibold tabular-nums">{usd(total)}</span>}>
-            <div className="flex h-2.5 overflow-hidden rounded-full bg-secondary">
-                {buckets.map((b) => (
-                    <div key={b.key} className={b.dot} style={{ width: `${(b.value / total) * 100}%` }} />
-                ))}
-            </div>
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                {buckets.map((b) => (
-                    <span key={b.key} className="flex items-center gap-1.5">
-                        <span className={`h-2 w-2 rounded-full ${b.dot}`} />
-                        {b.label} {share(b.value)}
-                    </span>
-                ))}
-            </div>
-
-            {crypto && (
-                <div className="mt-5">
-                    <div className="mb-2 flex justify-between text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        <span>Crypto</span>
-                        <span className="tabular-nums">{usd(crypto.value)}</span>
-                    </div>
-                    <ul className="space-y-3 text-sm">
-                        {crypto.items.map((p) => {
-                            const [coin, via] = splitName(p.name)
-                            const gain = p.investedUsd != null ? p.marketValue - p.investedUsd : null
-                            return (
-                                <li key={p.id} className="flex items-start justify-between gap-3">
-                                    <span className="flex items-start gap-2">
-                                        <span className="mt-1.5 h-2 w-2 rounded-full bg-amber-400" />
-                                        <span>
-                                            <span className="font-medium">{coin}</span>
-                                            {via && <span className="block text-xs text-muted-foreground">{via}</span>}
-                                        </span>
-                                    </span>
-                                    <span className="text-right tabular-nums">
-                                        {usd(p.marketValue)}
-                                        <span className="block text-xs">
-                                            <Signed v={p.change24hPct}>{pct(p.change24hPct, 1)} today</Signed>
-                                        </span>
-                                        {gain != null && (
-                                            <span className="block text-xs">
-                                                <Signed v={gain}>{usd(gain, { sign: true })}</Signed> <span className="text-muted-foreground">overall</span>
-                                            </span>
-                                        )}
-                                    </span>
-                                </li>
-                            )
-                        })}
-                    </ul>
-                </div>
-            )}
-
-            {rest.length > 0 && (
-                <div className="mt-5">
-                    <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Everything else</div>
-                    <ul className="space-y-2.5 text-sm">
-                        {rest.map((b) => (
-                            <li key={b.key} className="flex items-center justify-between gap-3">
-                                <span className="flex items-center gap-2">
-                                    <span className={`h-2 w-2 rounded-full ${b.dot}`} />
-                                    <span className="font-medium">{b.label}</span>
-                                </span>
-                                <span className="text-right tabular-nums">
-                                    {usd(b.value)}
-                                    <span className="block text-xs text-muted-foreground">{share(b.value)} of total</span>
-                                </span>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            )}
-        </Panel>
-    )
-}
-
 function Figure({ label, value, hint }: { label: string; value: React.ReactNode; hint?: React.ReactNode }) {
     return (
-        <div>
+        <div className="metric-figure group relative overflow-hidden border-b px-3 py-5 transition-all duration-300 even:border-l hover:bg-white/[0.035] sm:border-b-0 sm:border-l sm:first:border-l-0">
+            <span className="absolute inset-x-0 bottom-0 h-px origin-left scale-x-0 bg-gradient-to-r from-violet-400 via-fuchsia-400 to-transparent transition-transform duration-500 group-hover:scale-x-100" />
             <div className="text-xs text-muted-foreground">{label}</div>
-            <div className="mt-0.5 text-xl font-semibold tabular-nums">{value}</div>
+            <div className="mt-0.5 text-xl font-semibold tabular-nums transition-transform duration-300 group-hover:-translate-y-0.5">{value}</div>
             {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
-        </div>
-    )
-}
-
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-    return (
-        <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">{label}</dt>
-            <dd className="text-right">{value}</dd>
         </div>
     )
 }

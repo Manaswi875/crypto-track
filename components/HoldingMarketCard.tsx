@@ -1,7 +1,6 @@
 'use client'
 
 import { Line, LineChart, ResponsiveContainer, YAxis } from 'recharts'
-import { Panel } from '@/components/Badges'
 import { pct, price, usd } from '@/lib/format'
 
 export type Coin = {
@@ -43,19 +42,18 @@ function dayLabel(ratio: number) {
 }
 
 /** One crypto holding: what it's worth today, what went in, profit or loss, and its market. */
-export function HoldingMarketCard({ h, marketChange24hPct }: { h: Holding; marketChange24hPct: number }) {
+export function HoldingMarketCard({ h, marketChange24hPct, scenario = false }: { h: Holding; marketChange24hPct: number; scenario?: boolean }) {
     const [coinName, via] = splitName(h.name)
     const c = h.coin
     return (
-        <Panel
-            title={
+        <section className="border-y border-white/10 py-6">
+            <h4 className="mb-5 text-lg font-semibold">
                 <span>
                     {coinName} {via && <span className="font-normal text-muted-foreground">· {via}</span>}
                 </span>
-            }
-        >
+            </h4>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <Mini label="Worth today" value={usd(h.sellValueUsd)} />
+                <Mini label={scenario ? 'Worth after crash' : 'Worth today'} value={usd(h.sellValueUsd)} />
                 <Mini label="You put in" value={h.investedUsd != null ? usd(h.investedUsd) : '—'} />
                 <Mini
                     label={h.gainUsd == null ? 'Profit or loss' : h.gainUsd >= 0 ? 'Profit' : 'Loss'}
@@ -67,7 +65,7 @@ export function HoldingMarketCard({ h, marketChange24hPct }: { h: Holding; marke
             {c && (
                 <div className="mt-5 grid grid-cols-1 gap-5 border-t pt-5 md:grid-cols-2">
                     <dl className="space-y-3 text-sm">
-                        <Fact label="Today">
+                        <Fact label={scenario ? 'In this scenario' : 'Today'}>
                             {COIN_NAME[h.coinId]} <Change v={c.change24hPct} /> vs the market <Change v={marketChange24hPct} />
                         </Fact>
                         <Fact label="Is today unusual?">
@@ -95,7 +93,7 @@ export function HoldingMarketCard({ h, marketChange24hPct }: { h: Holding; marke
                     </div>
                 </div>
             )}
-        </Panel>
+        </section>
     )
 }
 
@@ -106,7 +104,7 @@ export function Change({ v }: { v: number }) {
 export function Figure({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: 'green' | 'red' }) {
     const color = tone === 'green' ? 'text-emerald-400' : tone === 'red' ? 'text-red-400' : ''
     return (
-        <div className="rounded-xl border bg-card/50 px-4 py-3">
+        <div className="interactive-surface rounded-xl border bg-card/50 px-4 py-3">
             <div className="text-xs text-muted-foreground">{label}</div>
             <div className={`mt-1 text-2xl font-semibold tabular-nums ${color}`}>{value}</div>
             {hint && <div className={`text-sm tabular-nums ${color}`}>{hint}</div>}

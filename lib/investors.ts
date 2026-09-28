@@ -22,7 +22,13 @@ export const unitsFor = (valueUsd: number, coinId: string | null, prices: Record
  * saved before units existed get their units fixed at today's price.
  */
 export async function loadInvestor(id: string) {
-    const investor = await prisma.investor.findUnique({ where: { id }, include: { positions: { orderBy: { marketValue: 'desc' } } } })
+    const investor = await prisma.investor.findUnique({
+        where: { id },
+        include: {
+            positions: { orderBy: { marketValue: 'desc' } },
+            currencyAlertPreferences: true,
+        },
+    })
     if (!investor) return null
     const prices = await livePrices()
 
@@ -42,7 +48,22 @@ export async function loadInvestor(id: string) {
         }),
     )
     positions.sort((a, b) => b.marketValue - a.marketValue)
-    return { ...investor, positions }
+    const preferences = new Map(investor.currencyAlertPreferences.map((preference) => [preference.coinId, preference]))
+    const heldCoinIds = [...new Set(positions.flatMap((position) => position.coinId ? [position.coinId] : []))]
+    const alertSettings = {
+        enabled: investor.alertEnabled,
+        cryptoPortfolio: {
+            enabled: investor.cryptoPortfolioAlertEnabled,
+            thresholdPct: investor.cryptoPortfolioAlertPct,
+        },
+        currencies: heldCoinIds.map((coinId) => ({
+            coinId,
+            enabled: preferences.get(coinId)?.enabled ?? true,
+            thresholdPct: preferences.get(coinId)?.thresholdPct ?? investor.alertThresholdPct,
+        })),
+    }
+    const { currencyAlertPreferences: _preferences, ...base } = investor
+    return { ...base, positions, alertSettings }
 }
 
 export type LoadedInvestor = NonNullable<Awaited<ReturnType<typeof loadInvestor>>>

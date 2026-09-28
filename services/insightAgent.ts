@@ -48,11 +48,11 @@ Rules:
 - Every number you state must come from a tool result. Quote dollar and percentage figures exactly as returned by get_my_impact. Never calculate your own figures.
 - A sell-off can move several coins by different amounts; get_my_impact breaks the loss down by holding. You only have data on these crypto moves. Do not claim how their cash, stocks, or bonds performed.
 - Use plain words for their holdings ("your Bitcoin fund", "your cash and savings"), not ticker symbols alone.
-- If the move exceeds their crypto loss tolerance, or they need the money soon, say so plainly and kindly. Suggest questions to reflect on, including whether to talk to a licensed financial adviser, but do not tell them what to do.
+- If the move crossed one of their configured holding or combined-crypto loss limits, or they need the money soon, say so plainly and kindly. Suggest questions to reflect on, including whether to talk to a licensed financial adviser, but do not tell them what to do.
 - Urgency:
-  - check_in_today: the drop in a coin they hold exceeds their crypto loss tolerance, or they need the money within about a year and this loss meaningfully affects it.
-  - within_your_plan: the drops are within their loss tolerance, the loss is under 5% of everything they have, and they do not need the money for several years.
-  - good_to_know: anything in between, e.g. within their tolerance but a large share of everything they have.
+  - check_in_today: a configured loss limit was crossed, or they need the money within about a year and this loss meaningfully affects it.
+  - within_your_plan: no alert limit was crossed, the loss is under 5% of everything they have, and they do not need the money for several years.
+  - good_to_know: anything in between.
 - Be brief: about 80 words in total. Say each thing once. Don't list things you don't know, and don't restate figures the screen already shows.
 
 When you are done, call submit_insight exactly once.`
@@ -66,21 +66,23 @@ export async function runInsightAgent(eventId: string, investorId: string, onSte
     const moves = eventMoves(event)
     const impact = portfolioImpact(investor.positions, moves)
     if (impact.exposureUsd === 0) throw new Error(`${investor.name} holds none of the coins that moved`)
-    // Loss tolerance is about the coins they actually hold
-    const worstHeldMove = Math.min(...impact.exposedPositions.map((p) => p.movePct))
+    const personalAlert = await prisma.investorAlert.findFirst({ where: { eventId, investorId }, orderBy: { occurredAt: 'desc' } })
 
     const agent = new AgentRun(onStep)
     let submitted: SubmittedInsight | null = null
 
     const tools = [
         ...agent.marketTools(event),
-        agent.tool('get_my_profile', "The investor's goal, why they own crypto, when they need the money, and their crypto loss tolerance (the largest drop they said they could sit through).", z.object({}), () => ({
+        agent.tool('get_my_profile', "The investor's goal, why they own crypto, when they need the money, their total-wealth planning boundary, and their live crypto alert limits.", z.object({}), () => ({
             name: investor.name,
             age: investor.age,
             goal: investor.goal,
             why_they_own_crypto: investor.cryptoReason || 'not given',
             needs_the_money: investor.timeHorizon,
-            crypto_loss_tolerance_pct: investor.dropComfortPct,
+            total_wealth_goal_boundary_pct: investor.dropComfortPct,
+            currency_investment_loss_limits: investor.alertSettings.currencies,
+            crypto_portfolio_investment_loss_limit: investor.alertSettings.cryptoPortfolio,
+            alert_triggered_for_this_event: personalAlert ? personalAlert.triggerDetails : null,
         })),
         agent.tool('get_my_positions', "Everything the investor holds: each crypto holding, plus their cash & savings and stocks & bonds, with values and share of the total, flagging what this move affects.", z.object({}), () => ({
             total_usd: impact.totalUsd,
@@ -90,19 +92,19 @@ export async function runInsightAgent(eventId: string, investorId: string, onSte
                     name: p.name,
                     type: p.assetClass === 'crypto_etf' ? 'crypto fund' : p.assetClass === 'crypto' ? 'crypto held directly' : p.name.toLowerCase(),
                     value_usd: p.marketValue,
+                    invested_usd: p.investedUsd,
                     share_of_total_pct: Number(((p.marketValue / impact.totalUsd) * 100).toFixed(2)),
                     affected_by_this_move: p.coinId != null && moves[p.coinId] != null,
                 })),
         })),
-        agent.tool('get_my_impact', 'The pre-computed dollar impact of this sell-off on the investor, in total and per holding, and how the drops compare with their crypto loss tolerance. Quote these numbers exactly.', z.object({}), () => ({
+        agent.tool('get_my_impact', 'The pre-computed dollar impact of this sell-off on the investor, in total and per holding, plus whether a personalized alert was created. Quote these numbers exactly.', z.object({}), () => ({
             crypto_exposure_usd: impact.exposureUsd,
             crypto_exposure_pct_of_total: impact.exposurePctOfTotal,
             estimated_impact_usd: impact.impactUsd,
             impact_pct_of_total: impact.impactPctOfTotal,
             by_holding: impact.exposedPositions.map((p) => ({ holding: p.name, value_usd: p.marketValue, move_pct: p.movePct, impact_usd: p.impactUsd })),
-            crypto_loss_tolerance_pct: investor.dropComfortPct,
-            largest_drop_among_their_holdings_pct: worstHeldMove,
-            exceeds_loss_tolerance: Math.abs(worstHeldMove) > investor.dropComfortPct,
+            personalized_alert_created: personalAlert != null,
+            personalized_alert_triggers: personalAlert?.triggerDetails ?? null,
         })),
         betaZodTool({
             name: 'submit_insight',

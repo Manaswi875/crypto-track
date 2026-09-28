@@ -9,7 +9,7 @@ const Draft = z.object({
     dropComfortPct: z
         .number()
         .nullable()
-        .describe('Largest crypto drop (%) they could sit through without selling. Only if they state it or clearly imply a number; otherwise null.'),
+        .describe('Whole-portfolio loss (%) that should trigger a serious personal check-in. Only if they state it or clearly imply a number; otherwise null.'),
     crypto: z
         .array(
             z.object({

@@ -1,6 +1,7 @@
 import redis from '@/lib/redis'
 import prisma from '@/lib/prisma'
 import { VolatilityDetector } from './volatilityDetector'
+import { PortfolioAlertMonitor, type MarketTick } from './portfolioAlertMonitor'
 
 const COINGECKO_API = 'https://api.coingecko.com/api/v3'
 const SUPPORTED_COINS = ['bitcoin', 'ethereum', 'solana', 'cardano', 'ripple']
@@ -9,10 +10,12 @@ const CLEANUP_EVERY_POLLS = 120
 
 export class PriceTracker {
     private detector: VolatilityDetector
+    private alertMonitor: PortfolioAlertMonitor
     private pollCount = 0
 
     constructor() {
         this.detector = new VolatilityDetector()
+        this.alertMonitor = new PortfolioAlertMonitor()
     }
 
     async start() {
@@ -30,6 +33,7 @@ export class PriceTracker {
                 `${COINGECKO_API}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true`
             )
             const data = await response.json()
+            const ticks: Record<string, MarketTick> = {}
 
             for (const coinId of SUPPORTED_COINS) {
                 const priceData = data[coinId]
@@ -37,7 +41,8 @@ export class PriceTracker {
 
                 const currentPrice = priceData.usd
                 const volume24h = priceData.usd_24h_vol
-                const change24h = priceData.usd_24h_change
+                const change24h = typeof priceData.usd_24h_change === 'number' && Number.isFinite(priceData.usd_24h_change) ? priceData.usd_24h_change : 0
+                ticks[coinId] = { price: currentPrice, change24h }
 
                 // 1. Update Redis Cache
                 if (redis) {
@@ -75,6 +80,8 @@ export class PriceTracker {
                 // 4. Run Volatility Detection
                 await this.detector.analyze(coinId, currentPrice)
             }
+
+            await this.alertMonitor.analyze(ticks)
 
             if (this.pollCount % CLEANUP_EVERY_POLLS === 0) {
                 const cutoff = new Date(Date.now() - PRICE_HISTORY_RETENTION_HOURS * 60 * 60 * 1000)

@@ -36,7 +36,18 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     const knownValue = known.reduce((s, h) => s + h.sellValueUsd, 0)
 
     return NextResponse.json({
-        investor: { id: investor.id, name: investor.name, isDemo: investor.isDemo },
+        investor: {
+            id: investor.id,
+            name: investor.name,
+            isDemo: investor.isDemo,
+            goal: investor.goal,
+            timeHorizon: investor.timeHorizon,
+            dropComfortPct: investor.dropComfortPct,
+            alertEnabled: investor.alertEnabled,
+            alertThresholdPct: investor.alertThresholdPct,
+            alertSettings: investor.alertSettings,
+            totalWealthUsd: investor.positions.reduce((sum, position) => sum + position.marketValue, 0),
+        },
         marketChange24hPct: market.change24hPct,
         totals: {
             sellValueUsd: holdings.reduce((s, h) => s + h.sellValueUsd, 0),

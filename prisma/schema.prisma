@@ -18,6 +18,7 @@ model Coin {
   status            String             @default("active")
   priceHistory      PriceHistory[]
   volatilityEvents  VolatilityEvent[]
+  alertPreferences  CurrencyAlertPreference[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 }
@@ -38,6 +39,7 @@ model VolatilityEvent {
   occurredAt    DateTime  @default(now())
   createdAt     DateTime  @default(now())
   Insight       Insight[]
+  investorAlerts InvestorAlert[]
 }
 
 model PriceHistory {
@@ -61,14 +63,53 @@ model Investor {
   goal           String // short, e.g. "Buy our first home"
   cryptoReason   String     @default("") // why they own crypto, e.g. "A small long-term bet"
   timeHorizon    String // when they need the money, e.g. "Spring 2027"
-  dropComfortPct Float // how far crypto could fall before they'd lose sleep
+  dropComfortPct Float // whole-portfolio loss boundary for goal planning and Crash Lab
   alertEnabled   Boolean    @default(true)
-  alertThresholdPct Float   @default(7) // external alert when a coin falls this much
+  alertThresholdPct Float   @default(7) // migration fallback: loss from amount invested
+  cryptoPortfolioAlertEnabled Boolean @default(true)
+  cryptoPortfolioAlertPct Float @default(5)
+  cryptoPortfolioAlertCrossed Boolean @default(false)
+  cryptoPortfolioLastTriggeredAt DateTime?
   isDemo         Boolean    @default(true)
   positions      Position[]
   insights       Insight[]
+  currencyAlertPreferences CurrencyAlertPreference[]
+  alerts         InvestorAlert[]
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
+}
+
+model CurrencyAlertPreference {
+  investorId     String
+  investor       Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  coinId         String
+  coin           Coin @relation(fields: [coinId], references: [id], onDelete: Cascade)
+  enabled        Boolean @default(true)
+  thresholdPct   Float
+  isCrossed      Boolean @default(false)
+  lastTriggeredAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@id([investorId, coinId])
+  @@index([coinId])
+}
+
+model InvestorAlert {
+  id                    String @id @default(cuid())
+  investorId            String
+  investor              Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  eventId               String
+  event                 VolatilityEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  triggerType           String
+  triggerDetails        Json
+  cryptoImpactUsd       Float
+  cryptoImpactPct       Float
+  hypothetical          Boolean @default(false)
+  occurredAt            DateTime @default(now())
+
+  @@index([investorId, occurredAt])
+  @@index([eventId])
 }
 
 model Position {

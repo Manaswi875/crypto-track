@@ -37,8 +37,10 @@ function contextBlock(i: InsightWithContext) {
                 goal: i.investor.goal,
                 why_they_own_crypto: i.investor.cryptoReason,
                 needs_the_money: i.investor.timeHorizon,
-                crypto_loss_tolerance_pct: i.investor.dropComfortPct,
-                holdings: i.investor.positions.map((p) => ({ name: p.name, value_usd: p.marketValue })),
+                total_wealth_goal_boundary_pct: i.investor.dropComfortPct,
+                currency_investment_loss_limits: i.investor.alertSettings.currencies,
+                crypto_portfolio_investment_loss_limit: i.investor.alertSettings.cryptoPortfolio,
+                holdings: i.investor.positions.map((p) => ({ name: p.name, value_usd: p.marketValue, invested_usd: p.investedUsd })),
             },
             impact: {
                 total_usd: impact.totalUsd,

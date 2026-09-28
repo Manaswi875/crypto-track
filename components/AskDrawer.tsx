@@ -8,7 +8,7 @@ const SUGGESTIONS = ['How am I doing overall?', 'Which of my holdings is riskies
 
 const storeKey = (investorId: string) => `ask-thread:${investorId}`
 
-/** "Ask about my money": a chat about the current investor's portfolio, available on every page. */
+/** "Ask Crypto Pulse": a chat about the current investor's portfolio, available on every page. */
 export function AskDrawer() {
     const [open, setOpen] = useState(false)
     const [investorId, setInvestorId] = useState('you')
@@ -32,6 +32,18 @@ export function AskDrawer() {
     useEffect(() => {
         endRef.current?.scrollIntoView({ block: 'end' })
     }, [thread, pending])
+
+    useEffect(() => {
+        const openWithQuestion = (event: Event) => {
+            const question = (event as CustomEvent<{ question?: string }>).detail?.question
+            const id = new URLSearchParams(window.location.search).get('investor') ?? 'you'
+            setInvestorId(id)
+            setOpen(true)
+            if (question) setQuestion(question)
+        }
+        window.addEventListener('open-ask-pulse', openWithQuestion)
+        return () => window.removeEventListener('open-ask-pulse', openWithQuestion)
+    }, [])
 
     async function ask(q: string) {
         const text = q.trim()
@@ -76,17 +88,22 @@ export function AskDrawer() {
             {!open && (
                 <button
                     onClick={() => setOpen(true)}
-                    className="fixed bottom-5 right-5 z-40 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-lg hover:bg-primary/90"
+                    className="group fixed bottom-5 right-5 z-40 flex items-center gap-3 rounded-full border border-violet-300/20 bg-slate-950/90 py-2 pl-2 pr-4 text-sm font-semibold text-white shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl transition-transform hover:scale-[1.03]"
                 >
-                    Ask about my money
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet-400 to-fuchsia-400 text-slate-950 shadow-[0_0_20px_rgba(192,132,252,0.35)]">✦</span>
+                    <span>Ask Crypto Pulse</span>
+                    <span className="text-violet-300 transition-transform group-hover:translate-x-0.5">→</span>
                 </button>
             )}
 
             {open && (
-                <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l bg-background shadow-2xl">
-                    <div className="flex items-center justify-between border-b px-5 py-3">
+                <>
+                <button onClick={() => setOpen(false)} className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm" aria-label="Close Crypto Pulse assistant" />
+                <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-white/10 bg-slate-950/95 shadow-[-24px_0_80px_rgba(0,0,0,0.5)] backdrop-blur-2xl" role="dialog" aria-modal="true" aria-label="Ask Crypto Pulse">
+                    <div className="flex items-center justify-between border-b border-white/10 bg-gradient-to-r from-violet-500/10 to-transparent px-5 py-4">
                         <div>
-                            <h3 className="text-sm font-semibold">Ask about {investorId === 'you' ? 'your' : 'this'} money</h3>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300">Personal agent</p>
+                            <h3 className="mt-1 text-lg font-semibold">Ask Crypto Pulse</h3>
                             <p className="text-xs text-muted-foreground">Answers use your goal, holdings and today&apos;s market. No buy or sell advice.</p>
                         </div>
                         <div className="flex items-center gap-3 text-xs">
@@ -104,14 +121,14 @@ export function AskDrawer() {
                     <div className="flex-1 space-y-4 overflow-y-auto p-5">
                         {thread.map((t, i) =>
                             t.role === 'user' ? (
-                                <div key={i} className="ml-auto max-w-[85%] rounded-lg bg-secondary px-3 py-2 text-sm">{t.content}</div>
+                                <div key={i} className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-violet-400 px-3.5 py-2.5 text-sm text-slate-950">{t.content}</div>
                             ) : (
                                 <p key={i} className="whitespace-pre-wrap text-sm leading-relaxed">{t.content}</p>
                             ),
                         )}
                         {pending && (
                             <>
-                                <div className="ml-auto max-w-[85%] rounded-lg bg-secondary px-3 py-2 text-sm">{pending.question}</div>
+                                <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-violet-400 px-3.5 py-2.5 text-sm text-slate-950">{pending.question}</div>
                                 {pending.answer ? (
                                     <p className="whitespace-pre-wrap text-sm leading-relaxed">{pending.answer}</p>
                                 ) : (
@@ -122,7 +139,7 @@ export function AskDrawer() {
                         {thread.length === 0 && !pending && (
                             <div className="flex flex-wrap gap-2">
                                 {SUGGESTIONS.map((s) => (
-                                    <button key={s} onClick={() => ask(s)} className="rounded-full border px-3 py-1 text-xs hover:bg-secondary">
+                                    <button key={s} onClick={() => ask(s)} className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-violet-300/30 hover:text-foreground">
                                         {s}
                                     </button>
                                 ))}
@@ -136,20 +153,21 @@ export function AskDrawer() {
                             e.preventDefault()
                             ask(question)
                         }}
-                        className="flex gap-2 border-t p-4"
+                        className="flex gap-2 border-t border-white/10 bg-black/20 p-4"
                     >
                         <input
                             value={question}
                             onChange={(e) => setQuestion(e.target.value)}
                             maxLength={500}
                             placeholder="Ask anything about your money or the market…"
-                            className="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                            className="flex-1 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm focus:border-violet-300/40 focus:outline-none"
                         />
-                        <button type="submit" disabled={!question.trim() || pending !== null} className="rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50">
-                            Ask
+                        <button type="submit" disabled={!question.trim() || pending !== null} className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-400 text-lg font-semibold text-slate-950 disabled:opacity-40" aria-label="Send question">
+                            ↑
                         </button>
                     </form>
                 </aside>
+                </>
             )}
         </>
     )

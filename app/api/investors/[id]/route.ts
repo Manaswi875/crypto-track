@@ -14,14 +14,23 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     const investor = await loadInvestor(params.id)
     if (!investor) return NextResponse.json({ error: 'Investor not found' }, { status: 404 })
 
-    const [events, insights] = await Promise.all([
+    const [listedEvents, insights, personalAlerts] = await Promise.all([
         listEvents(),
         prisma.insight.findMany({
             where: { investorId: investor.id },
             select: { id: true, eventId: true, status: true, urgency: true, headline: true },
         }),
+        prisma.investorAlert.findMany({
+            where: { investorId: investor.id },
+            orderBy: { occurredAt: 'desc' },
+            take: 20,
+            include: { event: { include: { coin: true } } },
+        }),
     ])
     const insightByEvent = new Map(insights.map((i) => [i.eventId, i]))
+    const personalAlertByEvent = new Map(personalAlerts.map((alert) => [alert.eventId, alert]))
+    const events = [...new Map([...personalAlerts.map((alert) => alert.event), ...listedEvents].map((event) => [event.id, event])).values()]
+        .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
 
     const crypto = investor.positions.filter((p) => p.coinId)
     const heldCoins = [...new Set(crypto.map((p) => p.coinId as string))]
@@ -58,6 +67,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
             ...e,
             impact: portfolioImpact(investor.positions, eventMoves(e)),
             insight: insightByEvent.get(e.id) ?? null,
+            personalAlert: personalAlertByEvent.get(e.id) ?? null,
             after: e.source === 'replay' ? ((after as Record<string, unknown>)[e.occurredAt.toISOString().slice(0, 10)] ?? null) : null,
         })),
     })
@@ -71,13 +81,25 @@ const CryptoHolding = z.object({
     investedUsd: z.number().positive().max(1e10).nullable().optional(),
 })
 
+const AlertSettings = z.object({
+    enabled: z.boolean(),
+    cryptoPortfolio: z.object({
+        enabled: z.boolean(),
+        thresholdPct: z.number().min(1).max(25),
+    }),
+    currencies: z.array(z.object({
+        coinId: z.enum(['bitcoin', 'ethereum', 'solana']),
+        enabled: z.boolean(),
+        thresholdPct: z.number().min(1).max(50),
+    })).max(3),
+})
+
 const Body = z.object({
     goal: z.string().trim().min(1).max(120),
     cryptoReason: z.string().trim().max(120).default(''),
     timeHorizon: z.string().trim().min(1).max(60),
-    dropComfortPct: z.number().min(1).max(100),
-    alertEnabled: z.boolean(),
-    alertThresholdPct: z.number().min(3).max(20),
+    dropComfortPct: z.number().min(0.5).max(25),
+    alertSettings: AlertSettings,
     crypto: z.array(CryptoHolding).min(1).max(20),
     cashUsd: z.number().min(0).max(1e10),
     investmentsUsd: z.number().min(0).max(1e10),
@@ -109,7 +131,12 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
     const parsed = Body.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid portfolio' }, { status: 400 })
-    const { goal, cryptoReason, timeHorizon, dropComfortPct, alertEnabled, alertThresholdPct } = parsed.data
+    const { goal, cryptoReason, timeHorizon, dropComfortPct, alertSettings } = parsed.data
+    const heldCoinIds = [...new Set(parsed.data.crypto.map((holding) => holding.coinId))]
+    const configuredCoinIds = alertSettings.currencies.map((setting) => setting.coinId)
+    if (new Set(configuredCoinIds).size !== configuredCoinIds.length || heldCoinIds.some((coinId) => !configuredCoinIds.includes(coinId)) || configuredCoinIds.some((coinId) => !heldCoinIds.includes(coinId))) {
+        return NextResponse.json({ error: 'Alert settings must include each held currency exactly once.' }, { status: 400 })
+    }
     const positions = toPositions(parsed.data, await livePrices())
 
     // Insights quote these numbers, so clear them only if something they depend on changed
@@ -121,8 +148,31 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
     await prisma.$transaction([
         prisma.position.deleteMany({ where: { investorId: investor.id } }),
+        prisma.currencyAlertPreference.deleteMany({ where: { investorId: investor.id } }),
         ...(changed ? [prisma.insight.deleteMany({ where: { investorId: investor.id } })] : []),
-        prisma.investor.update({ where: { id: investor.id }, data: { goal, cryptoReason, timeHorizon, dropComfortPct, alertEnabled, alertThresholdPct, positions: { create: positions } } }),
+        prisma.investor.update({
+            where: { id: investor.id },
+            data: {
+                goal,
+                cryptoReason,
+                timeHorizon,
+                dropComfortPct,
+                alertEnabled: alertSettings.enabled,
+                alertThresholdPct: alertSettings.currencies[0]?.thresholdPct ?? investor.alertThresholdPct,
+                cryptoPortfolioAlertEnabled: alertSettings.cryptoPortfolio.enabled,
+                cryptoPortfolioAlertPct: alertSettings.cryptoPortfolio.thresholdPct,
+                cryptoPortfolioAlertCrossed: false,
+                positions: { create: positions },
+                currencyAlertPreferences: {
+                    create: alertSettings.currencies.map((setting) => ({
+                        coinId: setting.coinId,
+                        enabled: setting.enabled,
+                        thresholdPct: setting.thresholdPct,
+                        isCrossed: false,
+                    })),
+                },
+            },
+        }),
     ])
     return NextResponse.json({ ok: true, insightsCleared: changed })
 }
