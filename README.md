@@ -225,4 +225,6 @@ The app exposes a health endpoint at `/api/health`.
 - Historical replays explain past paths; they do not predict future recovery.
 - Market-data availability is subject to the upstream provider and configured cache.
 
-For the evaluation approach, development lessons, and demo-safety workflow, see [How I Built Crypto Pulse with AI](BUILDING_WITH_AI.md).
+## Built with AI
+
+Crypto Pulse was designed and built by Manaswi with Claude as an AI development collaborator. The prompts, evaluation approach, mistakes, safeguards, and demo workflow are documented in [How I Built Crypto Pulse with AI](BUILDING_WITH_AI.md).
